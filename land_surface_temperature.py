@@ -18,6 +18,7 @@ NB edits:
 """
 import re
 from rasterio.warp import reproject, Resampling
+import numpy as np
 
 TIRS_WAVELENGTH = 10.895e-6  # average wavelength of TIRS band
 NDVI_SOIL = 0.2  # from Avdan et al.
