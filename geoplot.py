@@ -15,11 +15,12 @@ import matplotlib
 import matplotlib.pyplot as plt
 import pandas as pd
 from rasterio import plot as rplt
-import numpy.ma
+import numpy as np
+from numpy import ma 
 
 import raster_utils as ru
 
-def make_figure(shape=1,figsize=None):
+def make_figure(shape=1,figsize=None,**kwargs):
     """
     Setup fig,axes in the usual way, as a precursor to calling the other functions
 
@@ -44,7 +45,7 @@ def make_figure(shape=1,figsize=None):
     if figsize is None:
         figsize = (10*ncols, 10*nrows)
 
-    fig,axes = plt.subplots(nrows,ncols,figsize=figsize)
+    fig,axes = plt.subplots(nrows,ncols,figsize=figsize,**kwargs)
 
     fig.subplots_adjust(left=0.05,right=0.95,
                         bottom=0.05,top=0.9,
@@ -62,6 +63,22 @@ def zoom_to_data(axes, gdf):
     axes.set_xlim([aoi_left,aoi_right])
     return axes
 
+def zoom_to_aoi(axes, aoi_bounds):
+    """
+    Set the boundaries of the axes to the boundaries of supplied bounds object
+    
+    Input: 
+    axes = matplotlib.axes.Axes object
+    aoi_bounds = iterable bounds (left, top, right, bottom) given by
+        geopandas geodataframe.total_bounds property, 
+        OR BoundingBox given by bounds property of a rasterio dataset  
+
+    """
+
+    aoi_left,aoi_bottom,aoi_right,aoi_top = aoi_bounds
+    axes.set_ylim([aoi_bottom,aoi_top])
+    axes.set_xlim([aoi_left,aoi_right])
+    return axes
 
 def choropleth(axes, gdf,
         colname=None, 
@@ -249,7 +266,8 @@ def raster(axes, im,
     data = np.squeeze(im).copy()
     Nans = np.array(~np.isfinite(data))
     Nones = np.array(data is None)
-    data = np.ma.array(data,mask=(Nans | Nones)).filled()
+    datamask = (Nans | Nones)
+    data = ma.array(data,mask=datamask,fill_value=np.nan).filled()
 
     # 2. determine vmin/vmax, eg from input or percentiles
     if vmin is None:
@@ -275,7 +293,7 @@ def raster(axes, im,
 
     # 4. display
     if use_rst_plot:
-        base = rplt.show(data,ax=axes,cmap=colormap,#vmin=vmin,vmax=vmax,
+        base = rplt.show(data,ax=axes,cmap=colormap,vmin=vmin,vmax=vmax,
                   title=title,transform=transform,
                   norm=Norm
         )
