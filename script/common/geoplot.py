@@ -18,7 +18,7 @@ from rasterio import plot as rplt
 import numpy as np
 from numpy import ma 
 
-import raster_utils as ru
+from . import raster_utils as ru
 
 def make_figure(shape=1,figsize=None,**kwargs):
     """
