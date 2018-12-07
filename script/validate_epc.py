@@ -56,9 +56,12 @@ import time
 import matplotlib
 import matplotlib.pyplot as plt
 from scipy.stats import spearmanr, linregress
+from collections import OrderedDict
 
 from .common import geoplot
 from . import estimate_energy_eff as eee
+import imp
+imp.reload(eee)
 
 # Globals
 rootdir = '/Users/nathan.bourne/data/thermcert/'
@@ -72,6 +75,7 @@ product_label = ('rLST' if use_medsub_lst else 'LST')
 # Which columns of the EPC tables we are interested in
 keepcols_epc = ['POSTCODE',
                 'INSPECTION_DATE',
+                'TRANSACTION_TYPE',
                 'CURRENT_ENERGY_EFFICIENCY',
                 'ROOF_ENERGY_EFF',
                 'WALLS_ENERGY_EFF',
@@ -182,11 +186,12 @@ def main():
         else:
             print('STEP 1: aggregate EPCs geojson exists: reading it')
             lsoa_with_epc = gpd.read_file(output_epc_file)
+            print('Read file with shape {}',format(np.shape(lsoa_with_epc)))
 
         # Run validation on this data set
         print('STEP 2: run validation')
         run_validation(lsoa_with_epc,output_dir)
-        break
+        #break
     return
 
     
@@ -212,57 +217,97 @@ def aggregate_epcs(place_label,
     pc_cent = pd.read_csv(pc_cent_file)
     
     pc_cent_gdf = pc_cent
-    # The line below does not seem to be necessary... because I don't use spatial join but join on LSOA instead
+    # The lines below are not necessary because I don't use spatial join but join on LSOA instead
     #pc_cent_gdf = df_to_gdf(pc_cent)
-    
+    #pc_cent_gdf.crs = lsoa.crs
+
     # Assign postcode in standard format
     pc_cent_gdf = pc_cent_gdf.assign(postcode = pc_cent_gdf['pcd'].str.upper().str.replace(' ',''))
 
     # List postcodes associated with each LSOA OF INTEREST
-    print('Listing relevant postcodes (this takes about 5 minutes)')
-    lsoa_postcode_indices = []
-    tic=time.process_time()
-    for thislsoa in lsoa['LSOA code']:
-        inds, = np.where(pc_cent_gdf['lsoa11'] == thislsoa)
-        lsoa_postcode_indices = lsoa_postcode_indices + [inds]
-    # this does not do list concatenation, although it looks like it
-    # in fact the output is a list of np.ndarrays
-    # the length of the list is the number of LSOAs
-    # the length of the array in each element of the list is the number of postcodes in that LSOA
+    db_merge_pcd = True
+    if db_merge_pcd:
+        print('Joining postcodes to LSOAs')
+        lsoa_postcodes_merged = pd.merge(lsoa[['LSOA code']],
+                                         pc_cent_gdf[['lsoa11','postcode']],
+                                         how='inner',
+                                         left_on='LSOA code',
+                                         right_on='lsoa11',
+                                         validate='1:m')
+    else:
+        print('Listing relevant postcodes (this takes about 5 minutes)')
+        lsoa_postcode_indices = []
+        tic=time.process_time()
+        for thislsoa in lsoa['LSOA code']:
+            inds, = np.where(pc_cent_gdf['lsoa11'] == thislsoa)
+            lsoa_postcode_indices = lsoa_postcode_indices + [inds]
+        # this does not do list concatenation, although it looks like it
+        # in fact the output is a list of np.ndarrays
+        # the length of the list is the number of LSOAs
+        # the length of the array in each element of the list is the number of postcodes in that LSOA
 
-    toc = time.process_time()
-    print('Done. This took {:.1f} s'.format((toc-tic)/1.0))
+        toc = time.process_time()
+        print('Done. This took {:.1f} s'.format((toc-tic)/1.0))
 
-    # Construct EPC filenames to look for, using LAD codes from LSOA file
-    print('Selecting EPC files for LADs in AoI')
-    epc_files = []
-    for code,name in zip(lsoa['LAD code'].unique(),
-                         lsoa['LAD name'].unique()):
-        epc_files += [epc_filename(code,name)]
+    
 
-    print('There should be {} files'.format(len(epc_files)))
 
     # Check existence of all EPC files, read the data, and list LAD codes
-    # associated with each EPC file
+    # associated with each EPC file - this is done now and not in the later
+    # loop over LSOAs, because this way each file only needs to be opened once
 
-    print('Finding and opening EPC files')
+    print('Finding and opening EPC files for LADs in AoI')
     epc_list = []
     notfound = []
     epc_code_list = []
-            
-    for epc_ind in range(len(epc_files)):
-        filename = epc_files[epc_ind]
+    for code,name in zip(lsoa['LAD code'].unique(),
+                         lsoa['LAD name'].unique()):
+        
+        filename = epc_filename(code,name)
         if len(glob.glob(filename)) == 0:
             notfound += [filename]
         else:
             epc_data = pd.read_csv(filename)
             epc_data = epc_data[keepcols_epc]
             epc_list += [epc_data]
-            epc_code_list += [lsoa['LAD code'].iloc[epc_ind]]
+            epc_code_list += [code]
+
     print('{} files opened'.format(len(epc_list)))
     print('{} files not found'.format(len(notfound)))
     for ii in range(len(notfound)):
         print(notfound[ii])
+
+    # # Construct EPC filenames to look for, using LAD codes from LSOA file
+    # print('Selecting EPC files for LADs in AoI')
+    # epc_files = []
+    # for code,name in zip(lsoa['LAD code'].unique(),
+    #                      lsoa['LAD name'].unique()):
+    #     epc_files += [epc_filename(code,name)]
+
+    # print('There should be {} files'.format(len(epc_files)))
+
+    # # Check existence of all EPC files, read the data, and list LAD codes
+    # # associated with each EPC file
+
+    # print('Finding and opening EPC files')
+    # epc_list = []
+    # notfound = []
+    # epc_code_list = []
+            
+    # for epc_ind in range(len(epc_files)):
+    #     filename = epc_files[epc_ind]
+    #     if len(glob.glob(filename)) == 0:
+    #         notfound += [filename]
+    #     else:
+    #         epc_data = pd.read_csv(filename)
+    #         epc_data = epc_data[keepcols_epc]
+    #         epc_list += [epc_data]
+    #         epc_code_list += [lsoa['LAD code'].iloc[epc_ind]]
+
+    # print('{} files opened'.format(len(epc_list)))
+    # print('{} files not found'.format(len(notfound)))
+    # for ii in range(len(notfound)):
+    #     print(notfound[ii])
 
     """
     We now loop over the LSOAs, find the LAD, go to the relevant EPC data
@@ -295,23 +340,30 @@ def aggregate_epcs(place_label,
     AveDate_EPC_col = lastcol-7
     N_EPC_col = lastcol-8
 
-    print('Aggregating EPCs in each LSOA (this will take a couple of minutes')
+    print('Aggregating EPCs in each LSOA (this will take a couple of minutes)')
     tic=time.process_time()
     for lsoa_ind in range(filelength):
         thislsoa = lsoa.iloc[lsoa_ind]
-        thislsoa_postcode_indices = lsoa_postcode_indices[lsoa_ind]
-        thislsoa_postcodes = pc_cent_gdf['postcode'].iloc[thislsoa_postcode_indices]
+        
+        if db_merge_pcd:
+            thislsoa_postcode_indices = lsoa_postcodes_merged['LSOA code']==thislsoa['LSOA code']
+            thislsoa_postcodes = lsoa_postcodes_merged['postcode'][thislsoa_postcode_indices]
+        else:
+            thislsoa_postcode_indices = lsoa_postcode_indices[lsoa_ind]
+            thislsoa_postcodes = pc_cent_gdf['postcode'].iloc[thislsoa_postcode_indices]
         
         # Find relevant epc file
         thislsoa_lad_code = thislsoa['LAD code']
-        try:
-            thislsoa_epc_ind = np.squeeze(np.where(
-                np.array(epc_code_list) == thislsoa_lad_code))[0]
-        except:
-            print(thislsoa_lad_code,epc_code_list,np.where(
-                np.array(epc_code_list) == thislsoa_lad_code))
-            raise
+        thislsoa_epc_ind = np.flatnonzero(
+                np.array(epc_code_list) == thislsoa_lad_code)[0]
+        # Due to weirdness of the shape of epc_list combined with the 
+        # bizarre output of np.where, np.flatnonzero provides a better 
+        # alternative to np.where in the case where you want to index in 
+        # 1 dimension only
         epc_data = epc_list[thislsoa_epc_ind]
+        
+        #print(lsoa_ind, thislsoa_epc_ind, thislsoa_lad_code)
+
         epc_postcodes = epc_data['POSTCODE'].str.upper().str.replace(' ','')
         epc_data = epc_data.assign(POSTCODE_nosp = epc_postcodes)
         
@@ -332,11 +384,17 @@ def aggregate_epcs(place_label,
                                   epc_max_date)
         
         valid_epc = valid_trans & valid_date
+        if np.sum(valid_epc)==0:
+            print('Warning: no data selected')
+            import pdb; pdb.set_trace()
 
         # Aggregate data
         rows, = np.where(valid_epc)
         epc_count = len(rows) 
-        epc_dates = date_to_epoch(epc_dates[rows])
+        epc_dates = pd.to_datetime(thislsoa_epcs['INSPECTION_DATE'].iloc[rows],
+                                   errors='coerce',
+                                   yearfirst=True)
+        epc_dates = date_to_epoch(epc_dates)
         epc_cee = pd.to_numeric(
             thislsoa_epcs.iloc[rows]['CURRENT_ENERGY_EFFICIENCY'],
             errors='coerce'
@@ -372,18 +430,27 @@ def aggregate_epcs(place_label,
     lsoa_with_epc['FracPoorRoof_EPC'] /= lsoa_with_epc['N_EPC']
     lsoa_with_epc['FracPoorAll_EPC'] /= lsoa_with_epc['N_EPC']
 
+    lsoa_with_epc = lsoa_with_epc.assign(
+            AveCombEE_EPC = (lsoa_with_epc['AveRoofEE_EPC'] 
+                             + lsoa_with_epc['AveWallsEE_EPC']
+                             + lsoa_with_epc['AveWindowsEE_EPC'])
+    )
+
     # Output the results:
 
     # This is stupid but it won't output DateTimes correctly - have to convert to float or string
-    lsoa_with_epc = lsoa_with_epc.assign(
-        AveDate_EPC = lsoa_with_epc['AveDate_EPC'].astype(str))
+    # lsoa_with_epc2 = lsoa_with_epc.assign(
+    #     AveDate_EPC = lsoa_with_epc['AveDate_EPC'].astype(str))
+    lsoa_with_epc2 = lsoa_with_epc.copy()
+    lsoa_with_epc2['AveDate_EPC'] = lsoa_with_epc2['AveDate_EPC'].astype(str) 
     
     if len(glob.glob(output_epc_file))>0:
         print('Warning: overwriting existing file')
         os.system('rm -rf '+output_epc_file)
 
-    print('Outputing data to '+output_epc_file)
-    lsoa_with_epc.to_file(output_epc_file,driver='GeoJSON')
+    print('Outputing data with shape {} to {}'.format(
+        np.shape(lsoa_with_epc2),output_epc_file))
+    lsoa_with_epc2.to_file(output_epc_file,driver='GeoJSON')
 
     print('EPC aggregation done')    
     return lsoa_with_epc
@@ -394,16 +461,18 @@ def run_validation(lsoa_with_epc,output_dir):
     Create validation outputs: plots, table of results
 
     """
+    #import pprint as pp
+    #pp.pprint(lsoa_with_epc.keys())
 
     # First thing is to add Energy Efficiency/DTR parameters to the dataframe
     print('Fetching Energy Efficiency data')
     lsoa_all = eee.get_estimates(lsoa_with_epc)
     
     print('Making some plots')
-    
+    #pp.pprint(lsoa_all.keys())
     figtitle = 'All LSOAs'
     filename = output_dir+'All_LSOA_scatter.png'
-    subset = range(len(lsoa_with_epc))
+    subset = [True]*len(lsoa_all) #range(len(lsoa_with_epc))
     mcolor = '0.5'
     validation_plot_matrix(lsoa_all[subset],filename,figtitle,mcolor=mcolor)
 
@@ -421,7 +490,7 @@ def run_validation(lsoa_with_epc,output_dir):
 
     return
 
-def validation_plot_matrix(lsoa_data,filename,fig_title,mcolor='0.5'):
+def validation_plot_matrix(lsoa_data,plotname,fig_title,mcolor='0.5'):
     """Make a big matrix of scatter plots
 
     Inputs: 
@@ -444,38 +513,74 @@ def validation_plot_matrix(lsoa_data,filename,fig_title,mcolor='0.5'):
     Frac Poor All
     """
     
-    rowdata = [{'ydata':lsoa_data['LST_mean'].values, 'ylabel':'r LST','ylim':[-2,2]},
-               {'ydata':lsoa_data['DTR1'].values, 'ylabel':'DTR1','ylim':[5,70]},
-               {'ydata':lsoa_data['LST2'].values, 'ylabel':'DTR2','ylim':[5,70]},
-               {'ydata':lsoa_data['LST3'].values, 'ylabel':'DTR3','ylim':[5,70]}]
+    rowdata = [{'ydata':lsoa_data['LST_mean'].astype(float).values, 
+                    'ylabel':'r LST','ylim':[-2,2]},
+               {'ydata':lsoa_data['DTR1'].astype(float).values, 
+                    'ylabel':'DTR1','ylim':[5,70]},
+               {'ydata':lsoa_data['DTR2'].astype(float).values, 
+                    'ylabel':'DTR2','ylim':[5,70]},
+               {'ydata':lsoa_data['DTR3'].astype(float).values, 
+                    'ylabel':'DTR3','ylim':[5,70]}]
 
-    coldata = [{'xdata':lsoa_data['AveCEE_EPC'].values, 'xlabel':'Ave CEE', 'xlim':[40,90], 'expect':'-'},
-               {'xdata':lsoa_data['AveRoofEE_EPC'].values, 'xlabel':'Ave Roof EE', 'xlim':[0.5,5.5], 'expect':'-'},
-               {'xdata':lsoa_data['AveCombEE_EPC'].values, 'xlabel':'Ave Comb EE', 'xlim':[4,16], 'expect':'-'},
-               {'xdata':lsoa_data['FracEFG_EPC'].values*100, 'xlabel':'% EFG', 'xlim':[-5,90], 'expect':'+'},
-               {'xdata':lsoa_data['FracPoorRoof_EPC'].values*100, 'xlabel':'% Poor Roof', 'xlim':[-5,90], 'expect':'+'},
-               {'xdata':lsoa_data['FracPoorAll_EPC'].values*100, 'xlabel':'% Poor All', 'xlim':[-2,30], 'expect':'+'}]
+    coldata = [{'xdata':lsoa_data['AveCEE_EPC'].astype(float).values, 
+                    'xlabel':'Ave CEE', 'xlim':[40,90], 'expect':'-'},
+               {'xdata':lsoa_data['AveRoofEE_EPC'].astype(float).values, 
+                    'xlabel':'Ave Roof EE', 'xlim':[0.5,5.5], 'expect':'-'},
+               {'xdata':lsoa_data['AveCombEE_EPC'].astype(float).values, 
+                    'xlabel':'Ave Comb EE', 'xlim':[4,16], 'expect':'-'},
+               {'xdata':lsoa_data['FracEFG_EPC'].astype(float).values*100, 
+                    'xlabel':'% EFG', 'xlim':[-5,90], 'expect':'+'},
+               {'xdata':lsoa_data['FracPoorRoof_EPC'].astype(float).values*100, 
+                    'xlabel':'% Poor Roof', 'xlim':[-5,90], 'expect':'+'},
+               {'xdata':lsoa_data['FracPoorAll_EPC'].astype(float).values*100, 
+                    'xlabel':'% Poor All', 'xlim':[-2,30], 'expect':'+'}]
 
     ncols=len(coldata)
     nrows=len(rowdata)
 
+    # output table of results
+    # tabhdr = ' '.join(['#','xdata','ydata','spear_rho','spear_p',
+    #                    'linfit_slope','linfit_intercept','linfit_p',
+    #                    'linfit_r2','linfit_stderr'])
+    ntab = nrows * ncols
+    tableout = pd.DataFrame.from_dict(
+        OrderedDict({'xdata':np.array(['']*ntab),
+                    'ydata':np.array(['']*ntab),
+                    'exp':np.array(['']*ntab),
+                    'spear_rho':np.zeros(ntab),
+                    'spear_p':np.zeros(ntab),
+                    'linfit_slope':np.zeros(ntab),
+                    'linfit_intercept':np.zeros(ntab),
+                    'linfit_p':np.zeros(ntab),
+                    'linfit_r2':np.zeros(ntab),
+                    'linfit_stderr':np.zeros(ntab)
+                    }
+        )
+    )
+
     fig,axes = plt.subplots(nrows, ncols, figsize=(2*ncols,2*nrows))
     fig.subplots_adjust(left=0.05,right=0.95,
-                            bottom=0.05,top=0.9,
+                            bottom=0.07,top=0.92,
                             wspace=0.,hspace=0.) 
 
     fig.suptitle(fig_title,size=15)
 
+    ctr=0
     for jj in range(nrows):
         for ii in range(ncols):
             ax=axes[jj,ii]
             
-            valid, = np.where(np.isfinite(coldata[ii]['xdata']) & np.isfinite(rowdata[jj]['ydata']))
+            valid, = np.where(np.isfinite(coldata[ii]['xdata']) 
+                              & np.isfinite(rowdata[jj]['ydata']))
             xdata = coldata[ii]['xdata'][valid]
             ydata = rowdata[jj]['ydata'][valid]
-            
+            if len(valid)==0:
+                print('Row {} Col {} no data!')
+                continue
+
             # Plot data
-            ax.scatter(coldata[ii]['xdata'],rowdata[jj]['ydata'],marker='.',color=mcolor,alpha=0.20)
+            ax.scatter(coldata[ii]['xdata'],rowdata[jj]['ydata'],
+                       marker='.',color=mcolor,alpha=0.20)
             
             # Show correlation
             spr,spp = spearmanr(xdata,ydata)
@@ -484,11 +589,12 @@ def validation_plot_matrix(lsoa_data,filename,fig_title,mcolor='0.5'):
             
             # Show regression
             slope,intercept,r,pval,stderr = linregress(xdata,ydata)
+            rsq = r**2
             #print(ii,jj,slope,intercept,r**2,pval,stderr)
             xfit = np.array(coldata[ii]['xlim'])
             yfit = xfit*slope + intercept
             ax.plot(xfit,yfit,color='b',lw=0.5)
-            ax.text(0.1,0.02,'m= {:.2F}, p={:.1e} \nR$^2$={:.6F}'.format(slope,pval,r**2),
+            ax.text(0.1,0.02,'m= {:.2F}, p={:.1e} \nR$^2$={:.6F}'.format(slope,pval,rsq),
                     color='b',transform=ax.transAxes)
             
             # Show expectation
@@ -511,7 +617,18 @@ def validation_plot_matrix(lsoa_data,filename,fig_title,mcolor='0.5'):
                 ax.set_xlabel('')
                 ax.set_xticklabels([])
             
-    fig.savefig(filename)
+            # tabrow = ' '.join(coldata[ii]['xlabel'],rowdata[jj]['ylabel'],
+            #                   spr,spp,slope,intercept,pval,rsq,stderr)
+            # import pdb;pdb.set_trace()
+            tableout.iloc[ctr,:] = [coldata[ii]['xlabel'],
+                                    rowdata[jj]['ylabel'],
+                                    coldata[ii]['expect'],
+                                    spr,spp,slope,intercept,pval,rsq,stderr]
+            ctr+=1
+        
+    tablename = plotname.replace('.png','.dat')    
+    tableout.sort_values('spear_p').to_csv(tablename,sep=' ')
+    fig.savefig(plotname)
     return 
 
 
@@ -584,34 +701,41 @@ def filter_trans_type(df,values,exclude=False):
     see: https://www.ofgem.gov.uk/environmental-programmes
     """
 
-    series = df['Transaction Type']
+    series = df['TRANSACTION_TYPE']
 
     if np.size(values)==1:
-        if exclude:
-            bool_arr = ~series.str.match(values,case=False).values
+        if values == '' or values == ['']:
+            bool_arr = [True]*len(series)
+        elif exclude:
+            bool_arr = ~(series.str.match(values,case=False).values.astype(bool))
         else:
-            bool_arr = series.str.match(values,case=False).values
+            bool_arr = series.str.match(values,case=False).values.astype(bool)
 
     elif np.size(values)>1:
         bool_arr = np.array([False]*len(df))
         if exclude:
             for item in values:
-                bool_arr = bool_arr | series.str.match(item,case=False).values
+                bool_arr = (bool_arr 
+                    | series.str.match(item,case=False).values.astype(bool))
         else:
             for item in values:
-                bool_arr = bool_arr & ~series.str.match(item,case=False).values
+                bool_arr = (bool_arr 
+                    & ~(series.str.match(item,case=False).values.astype(bool)))
 
     else:
         bool_arr = [True]*len(series)
 
-    return (bool_arr==True)
+    return (np.array(bool_arr)==True)
 
 def filter_dates(df, min_date, max_date):
     """ Return a boolean vector =True where df['INSPECTION_DATE'] in range"""
 
-    epc_dates = pd.to_datetime(df['INSPECTION_DATE'],errors='coerce',yearfirst=True)
-    bool_arr = (epc_dates <= pd.Timestamp(max_date)) & (epc_dates >= pd.Timestamp(min_date))
-    return 
+    epc_dates = pd.to_datetime(df['INSPECTION_DATE'],
+                               errors='coerce',
+                               yearfirst=True)
+    bool_arr = ((epc_dates <= pd.Timestamp(max_date)) 
+                & (epc_dates >= pd.Timestamp(min_date)))
+    return (np.array(bool_arr)==True)
 
 def ee_str_to_float(ee_as_str_series):
     """

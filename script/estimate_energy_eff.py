@@ -10,6 +10,8 @@ energy efficiency estimates
 """
 
 # Imports 
+import numpy as np
+import pandas as pd
 import geopandas as gpd
 
 # Globals
@@ -37,7 +39,7 @@ def read_data(lst_file):
     """Read data on energy consumption and LST for a given place, year, product
     
     Join on LSOA code, not spatial join.
-    
+
     Return:
     Merged geodataframe (with geometry from the LST, not the energy cons.)
     """
@@ -51,6 +53,13 @@ def read_data(lst_file):
 
     lsoa_all = lsoa_lst.merge(
                          lsoa_consumption.drop('geometry',axis=1),
+                         # lsoa_consumption[['lsoa_code',
+                         #                   'accommodation',
+                         #                   'gas_consumption',
+                         #                   'gas_meters',
+                         #                   'electricity_consumption',
+                         #                   'electricity_meters'
+                         #                   ]],
                          left_on='LSOA code',
                          right_on='lsoa_code')
 
