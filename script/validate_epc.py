@@ -58,8 +58,8 @@ import matplotlib.pyplot as plt
 from scipy.stats import spearmanr, linregress
 from collections import OrderedDict
 
-from .common import geoplot
-from . import estimate_energy_eff as eee
+from common import geoplot # from .common ?
+import estimate_energy_eff as eee # from . ?
 import imp
 imp.reload(eee)
 
@@ -94,88 +94,91 @@ def main():
 
     new_build_epcs = 'new dwelling'
     
+    place = 'derbyshire'
+    season = '2014-2016'
+
     experiments = [
-        # 1a. 24 months of EPCs, all
-        {
-            'place' : 'derbyshire',
-            'season' : '2013-2014' ,
-            'epc_from' : '2013-01-01',
-            'epc_to' : '2014-12-31',
-            'epc_filter_trans' : '' ,
-            'validation_label' : '24month_all'
-        },
-        # 1b. 24 months of EPCs, no new builds
-        {
-            'place' : 'derbyshire',
-            'season' : '2013-2014' ,
-            'epc_from' : '2013-01-01',
-            'epc_to' : '2014-12-31',
-            'epc_filter_trans' : new_build_epcs,
-            'validation_label' : '24month_existing'
-        },
-        # 2a. 12 months of EPCs, all
+        # # 1a. 24 months of EPCs, all
+        # {
+        #     'place' : place,
+        #     'season' : season ,
+        #     'epc_from' : '2013-01-01',
+        #     'epc_to' : '2014-12-31',
+        #     'epc_filter_trans' : '' ,
+        #     'validation_label' : '24month_all'
+        # },
+        # # 1b. 24 months of EPCs, no new builds
+        # {
+        #     'place' : place,
+        #     'season' : season ,
+        #     'epc_from' : '2013-01-01',
+        #     'epc_to' : '2014-12-31',
+        #     'epc_filter_trans' : new_build_epcs,
+        #     'validation_label' : '24month_existing'
+        # },
+        # 2a. 16 months of EPCs, all
         { 
-            'place' : 'derbyshire',
-            'season' : '2013-2014' ,
-            'epc_from' : '2013-04-01',
-            'epc_to' : '2014-03-31',
+            'place' : place,
+            'season' : season ,
+            'epc_from' : '2014-11-01',
+            'epc_to' : '2016-02-28',
             'epc_filter_trans' : '' ,
-            'validation_label' : 'apr-mar_all'
+            'validation_label' : '16month_all'
         },
-        # 2b. 12 months of EPCs, no green-deal etc
+        # 2b. 16 months of EPCs, no green-deal etc
         {
-            'place' : 'derbyshire',
-            'season' : '2013-2014' ,
-            'epc_from' : '2013-04-01',
-            'epc_to' : '2014-03-31',
+            'place' : place,
+            'season' : season ,
+            'epc_from' : '2014-11-01',
+            'epc_to' : '2016-02-28',
             'epc_filter_trans' : green_deal_epcs,
-            'validation_label' : 'apr-mar_noECO'
+            'validation_label' : '16month_noECO'
         },
-        # 2c. 12 months of EPCs, no new builds
+        # 2c. 16 months of EPCs, no new builds
         {
-            'place' : 'derbyshire',
-            'season' : '2013-2014' ,
-            'epc_from' : '2013-04-01',
-            'epc_to' : '2014-03-31',
+            'place' : place,
+            'season' : season ,
+            'epc_from' : '2014-11-01',
+            'epc_to' : '2016-02-28',
             'epc_filter_trans' : new_build_epcs,
-            'validation_label' : 'apr-mar_existing'
+            'validation_label' : '16month_existing'
         },
-        # 2d. 12 months of EPCs, no new builds + no ECO
+        # 2d. 16 months of EPCs, no new builds + no ECO
         {
-            'place' : 'derbyshire',
-            'season' : '2013-2014' ,
-            'epc_from' : '2013-04-01',
-            'epc_to' : '2014-03-31',
+            'place' : place,
+            'season' : season ,
+            'epc_from' : '2014-11-01',
+            'epc_to' : '2016-02-28',
             'epc_filter_trans' : green_deal_epcs+[new_build_epcs],
-            'validation_label' : 'apr-mar_existing_noECO'
+            'validation_label' : '16month_existing_noECO'
         },
-        # 3a. 6 months of EPCs, all
-        {
-            'place' : 'derbyshire',
-            'season' : '2013-2014' ,
-            'epc_from' : '2013-10-01',
-            'epc_to' : '2014-03-31',
-            'epc_filter_trans' : '' ,
-            'validation_label' : 'oct-feb_all'
-        },
-        # 3b. 6 months of EPCs, no green deal etc
-        {
-            'place' : 'derbyshire',
-            'season' : '2013-2014' ,
-            'epc_from' : '2013-10-01',
-            'epc_to' : '2014-03-31',
-            'epc_filter_trans' : green_deal_epcs ,
-            'validation_label' : 'oct-feb_noECO'
-        },
-        # 3c. 6 months of EPCs, no new builds
-        {
-            'place' : 'derbyshire',
-            'season' : '2013-2014' ,
-            'epc_from' : '2013-10-01',
-            'epc_to' : '2014-03-31',
-            'epc_filter_trans' : new_build_epcs ,
-            'validation_label' : 'oct-feb_existing'
-        },
+        # # 3a. 6 months of EPCs, all
+        # {
+        #     'place' : place,
+        #     'season' : season ,
+        #     'epc_from' : '2013-10-01',
+        #     'epc_to' : '2014-03-31',
+        #     'epc_filter_trans' : '' ,
+        #     'validation_label' : 'oct-feb_all'
+        # },
+        # # 3b. 6 months of EPCs, no green deal etc
+        # {
+        #     'place' : place,
+        #     'season' : season ,
+        #     'epc_from' : '2013-10-01',
+        #     'epc_to' : '2014-03-31',
+        #     'epc_filter_trans' : green_deal_epcs ,
+        #     'validation_label' : 'oct-feb_noECO'
+        # },
+        # # 3c. 6 months of EPCs, no new builds
+        # {
+        #     'place' : place,
+        #     'season' : season ,
+        #     'epc_from' : '2013-10-01',
+        #     'epc_to' : '2014-03-31',
+        #     'epc_filter_trans' : new_build_epcs ,
+        #     'validation_label' : 'oct-feb_existing'
+        # },
     ]
 
     for ex in experiments:
