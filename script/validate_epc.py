@@ -167,8 +167,17 @@ def main():
             'epc_filter_trans' : green_deal_epcs ,
             'validation_label' : 'oct-feb_noECO'
         },
+        # 3c. 6 months of EPCs, no new builds
+        {
+            'place' : 'derbyshire',
+            'season' : '2013-2014' ,
+            'epc_from' : '2013-10-01',
+            'epc_to' : '2014-03-31',
+            'epc_filter_trans' : new_build_epcs ,
+            'validation_label' : 'oct-feb_existing'
+        },
     ]
-    
+
     for ex in experiments:
         place,season,epc_from,epc_to,epc_filter_trans,validation_label = ex.values()
 
@@ -342,6 +351,7 @@ def aggregate_epcs(place_label,
 
     print('Aggregating EPCs in each LSOA (this will take a couple of minutes)')
     tic=time.process_time()
+    lsoas_nodata = 0
     for lsoa_ind in range(filelength):
         thislsoa = lsoa.iloc[lsoa_ind]
         
@@ -385,8 +395,9 @@ def aggregate_epcs(place_label,
         
         valid_epc = valid_trans & valid_date
         if np.sum(valid_epc)==0:
-            print('Warning: no data selected')
-            import pdb; pdb.set_trace()
+            lsoas_nodata +=1 
+        #    print('Warning: no data selected')
+        #    import pdb; pdb.set_trace()
 
         # Aggregate data
         rows, = np.where(valid_epc)
@@ -414,7 +425,9 @@ def aggregate_epcs(place_label,
         lsoa_with_epc.iloc[lsoa_ind,FracPoorAll_EPC_col] += np.sum((epc_rfee<2.5)
                                                                    & (epc_wlee<2.5)
                                                                    & (epc_wdee<2.5))
-
+    if lsoas_nodata>0:
+        print('Warning: no data selected for {}/{} LSOAs'.format(lsoas_nodata,
+            filelength))
     toc = time.process_time()
     print('Done. This took {:.1f} s'.format((toc-tic)/1.0))
        
@@ -626,7 +639,7 @@ def validation_plot_matrix(lsoa_data,plotname,fig_title,mcolor='0.5'):
                                     spr,spp,slope,intercept,pval,rsq,stderr]
             ctr+=1
         
-    tablename = plotname.replace('.png','.dat')    
+    tablename = plotname.replace('.png','.csv')    
     tableout.sort_values('spear_p').to_csv(tablename,sep=' ')
     fig.savefig(plotname)
     return 
