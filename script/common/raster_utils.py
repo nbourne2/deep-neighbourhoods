@@ -108,8 +108,9 @@ def rescale_image(arr,kind='linear',**kwargs):
         return new_pixels.reshape(arr.shape)
         
     if kind=='clahe':
-        if arr.dtype == float:
-            larr = (arr-np.nanmin(arr))/(np.nanmax(arr)-np.nanmin(arr))
+        # if arr.dtype == float:
+        arr = arr.astype(np.float)
+        larr = (arr-np.nanmin(arr))/(np.nanmax(arr)-np.nanmin(arr))
         return clahe_equalize(larr, **kwargs)
 
 

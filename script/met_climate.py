@@ -131,7 +131,7 @@ class access_ukcp09():
 
         # Download the actual data
         self.tcol = 'monthly_meantemp'
-        at_temp_grid = self.data[self.tcol][MM,:,:]
+        at_temp_grid = self.data[self.tcol][MM-1,:,:]
         
         # Store as numpy array
         at_temp = at_temp_grid.array.data
@@ -172,12 +172,17 @@ class access_ukcp09():
             at_temp = self.get_daily_meantemp(date)
         elif type(date) is int:
             at_temp = self.get_monthly_meantemp(date)
-        
+        else:
+            print('Error: did not recognise data type of {}'.format(date)
+                  +' - expected int or str')
+            return
+
         xdata = self.data[self.xcol][:,:].array.data.flatten()
         ydata = self.data[self.ycol][:,:].array.data.flatten()
         tdata = at_temp.flatten() 
         
-        gooddata = tdata < 1e20
+        gooddata = tdata< 1e20 
+        # excluding null data - otherwise there will be high temp at coasts
         xdata1 = xdata[gooddata]
         ydata1 = ydata[gooddata]
         tdata1 = tdata[gooddata]
@@ -188,46 +193,31 @@ class access_ukcp09():
         scene_crs = scene.crs
         at_transform, width, height = calculate_default_transform(
             scene_crs, at_crs, scene.width, scene.height, *scene.bounds)
-        # kwargs = src.meta.copy()
-        # kwargs.update({
-        #     'crs': dst_crs,
-        #     'transform': dst_transform,
-        #     'width': width,
-        #     'height': height
-        # })
         
         raster_shape = (scene.height, scene.width)
         
-        # orig_scene = src.read()[0,:,:]
-        # repr_scene = np.zeros(raster_shape, orig_scene.dtype)
-        # reproject(
-        #         orig_scene,
-        #         repr_scene,
-        #         src_transform=src_transform,
-        #         src_crs=src.crs,
-        #         dst_transform=dst_transform,
-        #         dst_crs=dst_crs,
-        #         resampling=Resampling.nearest)
-
         # Interpolate air temp  data onto raster grid
+        
+        # First we define the grid of pixels in the SCENE and convert to xy 
+        # in the SCENE coordinates
         grid_r, grid_c = np.mgrid[0:raster_shape[0], 0:raster_shape[1]].astype(
             np.float)
-        grid_x, grid_y = rst.transform.xy(at_transform,grid_r,grid_c)
-        raster_grid_xy = (np.array(grid_x),np.array(grid_y))
+        sgrid_x, sgrid_y = rst.transform.xy(scene_transform,grid_r,grid_c)
+        sgrid_x = np.array(sgrid_x)
+        sgrid_y = np.array(sgrid_y)
+
+        # Next we must transform those xy coordinates into the CRS of the AT
+        from rasterio.warp import transform
+        agrid_x, agrid_y = transform(scene_crs,at_crs,
+                                     sgrid_x.flatten(),sgrid_y.flatten())
+
+        raster_grid_xy = (np.array(agrid_x).reshape(sgrid_x.shape),
+                          np.array(agrid_y).reshape(sgrid_y.shape))
         
-        at_regridded1 = griddata(np.transpose(np.array([xdata1,ydata1])),
+        # Finally we interpolate the AT data onto the defined pixel grid
+        at_regridded2 = griddata(np.transpose(np.array([xdata1,ydata1])),
                                  tdata1,
                                  raster_grid_xy,
                                  method=interpolation)
         
-        at_reproject2 = np.zeros_like(at_regridded1)
-        reproject(
-                at_regridded1,
-                at_reproject2,
-                src_transform=at_transform,
-                src_crs=at_crs,
-                dst_transform=scene_transform,
-                dst_crs=scene_crs,
-                resampling=rst_resampling)
-        
-        return at_reproject2
+        return at_regridded2
