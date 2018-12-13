@@ -70,7 +70,18 @@ pc_cent_file = rootdir+'uk_data/postcode_centroids/ONS_Postcode_Directory_Latest
 lad_file = raw_data_dir+'geometries/lad/Local_Authority_Districts_December_2016_Generalised_Clipped_Boundaries_in_the_UK.shp'
 
 use_medsub_lst = True 
-product_label = ('rLST' if use_medsub_lst else 'LST')
+use_all_lst = True
+if use_all_lst:
+    product_label = 'allLST'
+    lst_col_for_ee = 'rxLST_mean' # the columns to use for calculating DTRs 
+    lst_offset = (5 if lst_col_for_ee=='xrLST_mean' else 0)
+elif use_medsub_lst:
+    product_label = 'rLST' 
+    lst_offset = 0
+else:
+    product_label = 'LST'
+    lst_offset = 0
+
 
 # Which columns of the EPC tables we are interested in
 keepcols_epc = ['POSTCODE',
@@ -482,7 +493,11 @@ def run_validation(lsoa_with_epc,output_dir):
 
     # First thing is to add Energy Efficiency/DTR parameters to the dataframe
     print('Fetching Energy Efficiency data')
-    lsoa_all = eee.get_estimates(lsoa_with_epc)
+    if use_all_lst:
+        # Have to assign the LST_mean we actually want to use for the DTR's
+        lsoa_with_epc = lsoa_with_epc.assign(
+            LST_mean = lsoa_with_epc[lst_col_for_ee])
+    lsoa_all = eee.get_estimates(lsoa_with_epc,lst_offset=lst_offset)
     
     print('Making some plots')
     #pp.pprint(lsoa_all.keys())
@@ -529,14 +544,31 @@ def validation_plot_matrix(lsoa_data,plotname,fig_title,mcolor='0.5'):
     Frac Poor All
     """
     
-    rowdata = [{'ydata':lsoa_data['LST_mean'].astype(float).values, 
-                    'ylabel':'r LST','ylim':[-2,2]},
-               {'ydata':lsoa_data['DTR1'].astype(float).values, 
-                    'ylabel':'DTR1','ylim':[5,70]},
-               {'ydata':lsoa_data['DTR2'].astype(float).values, 
-                    'ylabel':'DTR2','ylim':[5,70]},
-               {'ydata':lsoa_data['DTR3'].astype(float).values, 
-                    'ylabel':'DTR3','ylim':[5,70]}]
+    if use_all_lst:
+        rowdata = [{'ydata':lsoa_data['rLST_mean'].astype(float).values, 
+                        'ylabel':'r LST','ylim':[-2,3.5]},
+                   {'ydata':lsoa_data['xLST_mean'].astype(float).values, 
+                        'ylabel':'x LST','ylim':[-6,7.5]}, 
+                   {'ydata':lsoa_data['rxLST_mean'].astype(float).values, 
+                        'ylabel':'rx LST','ylim':[-2,3]}, 
+                   {'ydata':lsoa_data['xrLST_mean'].astype(float).values, 
+                        'ylabel':'xr LST','ylim':[-6.5,-1.5]},   
+                   {'ydata':lsoa_data['DTR1'].astype(float).values, 
+                        'ylabel':'rx DTR1','ylim':[-2,7]},
+                   {'ydata':lsoa_data['DTR2'].astype(float).values, 
+                        'ylabel':'rx DTR2','ylim':[-2,7]},
+                   {'ydata':lsoa_data['DTR3'].astype(float).values, 
+                        'ylabel':'rx DTR3','ylim':[-2,7]}]
+    else:
+        rowdata = [{'ydata':lsoa_data['LST_mean'].astype(float).values, 
+                        'ylabel':'r LST' if use_medsub_lst else 'LST',
+                        'ylim':[-2,2]},
+                   {'ydata':lsoa_data['DTR1'].astype(float).values, 
+                        'ylabel':'DTR1','ylim':[5,70]},
+                   {'ydata':lsoa_data['DTR2'].astype(float).values, 
+                        'ylabel':'DTR2','ylim':[5,70]},
+                   {'ydata':lsoa_data['DTR3'].astype(float).values, 
+                        'ylabel':'DTR3','ylim':[5,70]}]
 
     coldata = [{'xdata':lsoa_data['AveCEE_EPC'].astype(float).values, 
                     'xlabel':'Ave CEE', 'xlim':[40,90], 'expect':'-'},

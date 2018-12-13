@@ -18,7 +18,7 @@ import geopandas as gpd
 rootdir = '/Users/nathan.bourne/data/thermcert/'
 consumption_file = rootdir+'uk_data/astrosat_data/lsoa_with_gas_and_electricity.geojson'
     
-def get_estimates(lst_file):
+def get_estimates(lst_file,**lst_offset):
     """Main function
     
     Input:
@@ -31,7 +31,7 @@ def get_estimates(lst_file):
 
     lsoa_all = read_data(lst_file)
 
-    lsoa_all = define_params(lsoa_all)
+    lsoa_all = define_params(lsoa_all,**lst_offset)
 
     return lsoa_all
 
@@ -65,7 +65,7 @@ def read_data(lst_file):
 
     return lsoa_all
 
-def define_params(lsoa_all):
+def define_params(lsoa_all,lst_offset=10):
     """Define energy efficiency parameters and add to dataframe
 
     Input: dataframe with the following columns:
@@ -97,8 +97,8 @@ def define_params(lsoa_all):
     EC = EC / (np.max(EC))
     GCC = GC / Frac_on_gas_grid
 
-    DTR1 = (10+LST) / GC
-    DTR2 = (10+LST) / GCC
+    DTR1 = (lst_offset + LST) / GC
+    DTR2 = (lst_offset + LST) / GCC
 
     Frac_main_heat_gas = (pd.to_numeric(lsoa_all['central_heating_gas_pct']
                                         ,errors='coerce') 
@@ -113,7 +113,7 @@ def define_params(lsoa_all):
 
     TC = ((GC * Frac_main_heat_gas) + (EC * Frac_main_heat_elec)) / (1 - Frac_main_heat_other)
                         
-    DTR3 = (10+LST) / TC
+    DTR3 = (lst_offset + LST) / TC
 
     lsoa_all = lsoa_all.copy().assign(DTR1 = DTR1,
                                       DTR2 = DTR2,
