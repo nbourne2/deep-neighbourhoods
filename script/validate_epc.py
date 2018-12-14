@@ -53,12 +53,12 @@ import pandas as pd
 import geopandas as gpd
 import glob
 import time
-import matplotlib
+# import matplotlib
 import matplotlib.pyplot as plt
 from scipy.stats import spearmanr, linregress
 from collections import OrderedDict
 
-from common import geoplot # from .common ?
+# from common import geoplot # from .common ?
 import estimate_energy_eff as eee # from . ?
 import imp
 imp.reload(eee)
