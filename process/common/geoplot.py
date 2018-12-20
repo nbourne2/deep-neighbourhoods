@@ -287,6 +287,8 @@ def raster(axes, im,
     if len(rescale_kind)>0:
         data = ru.rescale_image(data,kind=rescale_kind,
                                 **clahe_equalize_kwargs)
+        # Have to redefine vmin,vmax now (will be 0,1 ?)
+        vmin,vmax = data.min(),data.max()
     #
     if Norm is None:
         Norm = matplotlib.colors.Normalize(vmin=vmin,vmax=vmax)

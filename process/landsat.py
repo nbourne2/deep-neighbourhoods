@@ -22,7 +22,7 @@ print(tab[rows].iloc[sort])
 scenes,dates = aws.find_in_bucket(203,23,'QA',maxDate='20170101')
 sort = np.argsort(dates)
 print(len(sort))
-print(scenes[sort])
+print(np.array(scenes)[sort])
 
 # Open in rasterio over https
 with rasterio.open(aws.https_stub+scenes[sort][0]) as src:
@@ -51,7 +51,7 @@ print(tab[rows].iloc[sort])
 scenes,dates = gcs.find_in_bucket(203,23,'QA',maxDate='20170101')
 sort = np.argsort(dates)
 print(len(sort))
-print(scenes[sort])
+print(np.array(scenes)[sort])
 
 # Open in rasterio over https
 with rasterio.open(gcs.https_stub+myscenes[sort][0]) as src:
@@ -155,7 +155,8 @@ class aws():
         return (m_path & m_row & m_date1 & m_date2 & m_cloud & m_proc & m_aoi)
     
     def find_in_bucket(self,path,row,band,Collection=True,
-                       minDate=pd.Timestamp.min,maxDate=pd.Timestamp.max):
+                       minDate=pd.Timestamp.min,maxDate=pd.Timestamp.max,
+                       UniqueAcq=True):
         """
         Look for Landsat-8 scenes matching these criteria in the bucket
 
@@ -165,7 +166,8 @@ class aws():
         band = int or str: Note that a band must be specified (if it was not coded this way, it would match all bands)
         Collection: specify whether to look in Collection or Pre-collection (one or the other, not both)
         minDate,maxDate = [optional] anything that can be parsed by pd.to_datetime()
-
+        UniqueAcq = check whether multiple scenes with the same acquisition date, 
+            and return the one with the latest processing date
         Returns: tuple (list of scene names, list of pd.datetimes of acquisitions)
         """
         import boto3
@@ -196,19 +198,31 @@ class aws():
                 continue
             obs_meta = obs_meta.groups()
 
-            if collection:
+            if Collection:
                 obs_sens,obs_lev,obs_proc,obs_path,obs_row,obs_date,pro_date,coll_no,coll_cat = obs_meta
                 Tobs = pd.to_datetime(obs_date)
+                Tpro = pd.to_datetime(pro_date)
             else:
                 obs_sens,obs_path,obs_row,obs_year,obs_jday,obs_gsi,obs_ver = obs_meta
                 Tobs = pd.to_datetime(obs_year+obs_jday,format='%Y%j')
-
+                Tpro = Tobs # no processing date for pre-collection data
             if ((Tobs>=pd.to_datetime(minDate)) and 
                 (Tobs<=pd.to_datetime(maxDate))):
                     good_scenes += [objsum.key]
                     good_scene_dates += [Tobs]
-        
-        return np.array(good_scenes),np.array(good_scene_dates)
+                    good_scene_pdates += [Tpro]
+
+        # Check for unique acquisitions
+        if UniqueAcq:
+            good_scene_dates = np.array(good_scene_dates)
+            good_scenes = np.array(good_scenes)
+            # Sort by proc date, then get unique obs dates
+            newestfirst = np.argsort(good_scene_pdates)[::-1]
+            good_scene_dates,unique_scene_ind = np.unique(
+                good_scene_dates[newestfirst],return_index=True)
+            good_scenes = good_scenes[newestfirst[unique_scene_ind]]
+         
+        return list(good_scenes),list(good_scene_dates)
 
 
 
@@ -316,7 +330,8 @@ class gcs():
         return (m_path & m_row & m_date1 & m_date2 & m_cloud & m_proc & m_aoi & m_col & m_cat & m_sat & m_sens)
 
     def find_in_bucket(self,path,row,band,Collection=True,
-                       minDate=pd.Timestamp.min,maxDate=pd.Timestamp.max):
+                       minDate=pd.Timestamp.min,maxDate=pd.Timestamp.max,
+                       UniqueAcq=True):
         """
         Look for Landsat-8 scenes matching these criteria in the bucket
 
@@ -326,7 +341,8 @@ class gcs():
         band = int or str: Note that a band must be specified (if it was not coded this way, it would match all bands)
         Collection: specify whether to look in Collection or Pre-collection (one or the other, not both)
         minDate,maxDate = [optional] anything that can be parsed by pd.to_datetime()
-
+        UniqueAcq = check whether multiple scenes with the same acquisition date, 
+            and return the one with the latest processing date
         Returns: tuple (list of scene names, list of pd.datetimes of acquisitions)
         """
         from google.cloud import storage
@@ -351,6 +367,7 @@ class gcs():
             
         good_scenes=[]
         good_scene_dates=[]
+        good_scene_pdates=[]
         # The following line will list scenes matching the prefix:
         for blob in bucket.list_blobs(prefix=prefix): #,delimiter='/'
             obs_meta = re.match(prefix+search_str, blob.name)
@@ -360,12 +377,25 @@ class gcs():
             if Collection:
                 obs_sens,obs_lev,obs_proc,obs_path,obs_row,obs_date,pro_date,coll_no,coll_cat = obs_meta
                 Tobs = pd.to_datetime(obs_date)
+                Tpro = pd.to_datetime(pro_date)
             else:
                 obs_sens,obs_path,obs_row,obs_year,obs_jday,obs_gsi,obs_ver = obs_meta
                 Tobs = pd.to_datetime(obs_year+obs_jday,format='%Y%j')
+                Tpro = Tobs # no processing date for pre-collection data
             if ((Tobs>=pd.to_datetime(minDate)) and 
                 (Tobs<=pd.to_datetime(maxDate))):
                     good_scenes += [blob.name]
                     good_scene_dates += [Tobs]
-        
-        return np.array(good_scenes),np.array(good_scene_dates)
+                    good_scene_pdates += [Tpro]
+
+        # Check for unique acquisitions
+        if UniqueAcq:
+            good_scene_dates = np.array(good_scene_dates)
+            good_scenes = np.array(good_scenes)
+            # Sort by proc date, then get unique obs dates
+            newestfirst = np.argsort(good_scene_pdates)[::-1]
+            good_scene_dates,unique_scene_ind = np.unique(
+                good_scene_dates[newestfirst],return_index=True)
+            good_scenes = good_scenes[newestfirst[unique_scene_ind]]
+
+        return list(good_scenes),list(good_scene_dates)
