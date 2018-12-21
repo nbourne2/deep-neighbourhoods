@@ -44,6 +44,29 @@ from scipy.interpolate import griddata
 from pydap.client import open_url
 from pydap.cas.get_cookies import setup_session
 
+class dummy_scene():
+    """ A dummy scene object to pass to grid_temp_over_scene when you just 
+    have a crs, transform and aoi but no data to put in it
+
+    Properties:
+    crs, transform = standard rasterio properties describing coord system
+    bounds = BoundingBox describing physical extent on the ground
+    width, height, shape = array shape
+
+    Inputs:
+    crs, transform = as expected
+    aoi = dict with keys minx, miny, maxx, maxy *in that order*
+    shape = tuple (nrows, ncols) = (height, width)
+    """
+    def __init__(self,crs,transform,aoi,shape):
+        self.crs = crs
+        self.transform = transform
+        self.bounds = rst.coords.BoundingBox(*aoi.values())
+        self.width = shape[1]
+        self.height = shape[0]
+        self.shape = shape
+        return
+
 class access_ukcp09():
     def __init__(self,username,password):
         self.url = 'http://data.ceda.ac.uk/badc/ukcp09/data/gridded-land-obs/'
@@ -87,7 +110,7 @@ class access_ukcp09():
             self.data = open_url(dataset_url, session=self.session)
         except:
             print('Error accessing data: {}'.format(dataset_url))
-            return
+            raise
 
         # Download the actual data
         self.tcol = 'daily_meantemp'

@@ -62,9 +62,10 @@ from scipy.ndimage import convolve, filters
 
 import landsat
 import land_surface_temperature as lst
+import met_climate
 from common import raster_utils as ru
 from common import geoplot as gpl
-
+        
 # GLOBALS
 rootdir = '/Users/nathan.bourne/data/thermcert/'
 tirband = '10'
@@ -79,6 +80,7 @@ lsoa_file = rootdir+'uk_data/astrosat_data/lsoa_with_gas_and_electricity.geojson
 uk_counties_shapefile = rootdir+'uk_data/counties_and_ua_boundaries/'\
     +'Counties_and_Unitary_Authorities_December_2015_Generalised_Clipped_'\
     +'Boundaries_in_England_and_Wales.shp'
+ceda_username = 'nbourne'
 
 def parse_metadata(lines):
     objects = {}
@@ -124,7 +126,7 @@ def get_metadata(scene_urls):
     return meta_list
 
 
-def display_qamask(scene_url,output_plot_dir,**aoi_kwargs):
+def display_qamask(scene_url,output_plot_dir,cloud_mask_bits,**aoi_kwargs):
 
     filename = output_plot_dir + \
                 scene_url.split('/')[-1].replace(
@@ -194,7 +196,7 @@ def display_qamask(scene_url,output_plot_dir,**aoi_kwargs):
 
     # Combined mask of selected bits
     mask_all = filters.maximum_filter(
-        ru.mask_qa(bqa_data,bits=[0,1,4,8,10]),
+        ru.mask_qa(bqa_data,bits=cloud_mask_bits),
         size=smw
         )
 
@@ -277,7 +279,7 @@ def get_ceda_password():
     f.close()
     return content
 
-def stack_tir(scene_urls,aoi,aoi_crs,
+def stack_tir(scene_urls,cloud_mask_bits,aoi,aoi_crs,
               subtract_median_lst=True,subtract_air_temp=False):
     """
     Convert clipped and masked TIR scenes to LST, then aggregate 
@@ -288,13 +290,7 @@ def stack_tir(scene_urls,aoi,aoi_crs,
 
     """
     if subtract_air_temp:
-        from script import met_climate
-        import imp
-        imp.reload(met_climate)
-
         ceda_password = get_ceda_password()
-        ceda_username = 'nbourne'
-
         at = met_climate.access_ukcp09(ceda_username,ceda_password)
 
     
@@ -321,66 +317,84 @@ def stack_tir(scene_urls,aoi,aoi_crs,
         scene_nir = scene_url.replace('B'+tirband,'B'+nband)
         scene_metadata = scene_url.replace('B'+tirband+'.TIF','MTL.txt')
 
-        with rasterio.open(scene_bqa) as bqa:
-            bqa_data,bqa_trans = ru.read_in_aoi(bqa,**aoi_kwargs)
+        print('Reading scene {}'.format(counter))
+        try:
+            with rasterio.open(scene_bqa) as bqa:
+                print(scene_bqa)
+                bqa_data,bqa_trans = ru.read_in_aoi(bqa,aoi=aoi,aoi_crs=aoi_crs)
 
             with rasterio.open(scene_tir) as tir:
-                tir_data,tir_trans = ru.read_in_aoi(tir,**aoi_kwargs)
+                print(scene_tir)
+                tir_data,tir_trans = ru.read_in_aoi(tir,aoi=aoi,aoi_crs=aoi_crs)
                 tir_crs = tir.crs
+                tir_profile = tir.profile
 
             with rasterio.open(scene_red) as red:
-                red_data,red_trans = ru.read_in_aoi(red,**aoi_kwargs)
+                print(scene_red)
+                red_data,red_trans = ru.read_in_aoi(red,aoi=aoi,aoi_crs=aoi_crs)
                 red_crs = red.crs
 
             with rasterio.open(scene_nir) as nir:
-                nir_data,nir_trans = ru.read_in_aoi(nir,**aoi_kwargs)
-
-            bqa_data = ma.array(bqa_data[0,:,:].squeeze())
-            tir_data = ma.array(tir_data[0,:,:].squeeze())
-            red_data = ma.array(red_data[0,:,:].squeeze())
-            nir_data = ma.array(nir_data[0,:,:].squeeze())
+                print(scene_nir)
+                nir_data,nir_trans = ru.read_in_aoi(nir,aoi=aoi,aoi_crs=aoi_crs)
+        
+        except OSError as e:
+            print('ERROR',e)
+            print('skipping scene')
+            counter = counter-1
+            continue
+        
+        # Determine size of stack allowing for AoI to extend outside of scene
+        if counter == 0:
+            aoi_box = rasterio.warp.transform_bounds(aoi_crs,tir_crs,*aoi.values())
+            aoi_left, aoi_bottom, aoi_right, aoi_top = aoi_box
+            aoi_box = dict(zip(('minx','miny','maxx','maxy'),aoi_box))
+            # rowmin,colmin = (bqa.index(aoi_left,aoi_top)) #,op=round))
+            # rowmax,colmax = (bqa.index(aoi_right,aoi_bottom)) #,op=round))
+            # The above two lines are fine but the following does not 
+            # require the rasterio dataset to be kept open
+            rowmin,colmin = rasterio.transform.rowcol(tir_trans,aoi_left,aoi_top)
+            rowmax,colmax = rasterio.transform.rowcol(tir_trans,aoi_right,aoi_bottom)
+            stack_height,stack_width = (rowmax-rowmin,colmax-colmin)
+            lst_stack = (ma.zeros((len(scene_urls),stack_height,stack_width),
+                                  dtype=np.float,fill_value=np.nan
+                                 )+np.nan)   
             
-            print(np.shape(tir_data))
+        # Determine size of intersect in THIS scene
+        intersect = ru.aoi_scene_intersection(aoi_box,bqa)
+        ins_left, ins_bottom, ins_right, ins_top = intersect.bounds
+        #rowmin,colmin = (bqa.index(ins_left,ins_top,op=round))
+        #rowmax,colmax = (bqa.index(ins_right,ins_bottom,op=round))
+        # The above two lines are incorrect now that we read a window:
+        # We need to transform the coordinates into the row,col of 
+        # the window, not the original file.
+        rowmin,colmin = rasterio.transform.rowcol(tir_trans,ins_left,ins_top)
+        rowmax,colmax = rasterio.transform.rowcol(tir_trans,ins_right,ins_bottom)
 
-
-            
-            # Determine size of stack allowing for AoI to extend outside of scene
-            if counter == 0:
-                aoi_box = rasterio.warp.transform_bounds(aoi_crs,tir_crs,*aoi.values())
-                aoi_box = dict(zip(('minx','miny','maxx','maxy'),aoi_box))
-                aoi_left, aoi_bottom, aoi_right, aoi_top = aoi_box
-                rowmin,colmin = (bqa.index(aoi_left,aoi_top,op=round))
-                rowmax,colmax = (bqa.index(aoi_right,aoi_bottom,op=round))
-                stack_height,stack_width = (rowmax-rowmin,colmax-colmin)
-                lst_stack = (ma.zeros((len(scenes_bqa),stack_height,stack_width),
-                                      dtype=np.float,fill_value=np.nan
-                                     )+np.nan)   
-
-            # Determine size of intersect in THIS scene
-            intersect = ru.aoi_scene_intersection(aoi_box,bqa)
-            ins_left, ins_bottom, ins_right, ins_top = intersect.bounds
-            rowmin,colmin = (bqa.index(ins_left,ins_top,op=round))
-            rowmax,colmax = (bqa.index(ins_right,ins_bottom,op=round))
-            # Is this still correct given that we read a window?
-
-        # Read data 
-        bqa_data = ma.array(bqa_data[0,rowmin:rowmax,colmin:colmax])
-        tir_data = ma.array(tir_data[0,rowmin:rowmax,colmin:colmax])
-        red_data = ma.array(red_data[0,rowmin:rowmax,colmin:colmax])
-        nir_data = ma.array(nir_data[0,rowmin:rowmax,colmin:colmax])
+        try:
+            # Subset data 
+            bqa_data = ma.array(bqa_data[0,rowmin:rowmax,colmin:colmax])
+            tir_data = ma.array(tir_data[0,rowmin:rowmax,colmin:colmax])
+            red_data = ma.array(red_data[0,rowmin:rowmax,colmin:colmax])
+            nir_data = ma.array(nir_data[0,rowmin:rowmax,colmin:colmax])
+            assert tir_data.shape == lst_stack.shape[1:]
+        except (IndexError,AssertionError) as e:
+            print('ERROR:',e)
+            print('loop count',counter)
+            print(tir_data.shape, lst_stack.shape)
+            print(rowmin,rowmax,colmin,colmax)
+            import pdb; pdb.set_trace()
 
         lst_data = lst.calculate_land_surface_temperature_NB(
                         red_data, nir_data, tir_data,
                         red_trans, tir_trans, 
                         red_crs, tir_crs, scene_metadata
                         )
-        # Have to pass it a path to a local tmp file "scene_metadata"
-
-
+        
         # Masks
         smw = 11
         mask_all = filters.maximum_filter(
-                            ru.mask_qa(bqa_data,bits=[0,1,4,8,10]),size=smw
+                            ru.mask_qa(bqa_data,bits=cloud_mask_bits),size=smw
                             )
 
         lst_data_mask_all = ma.array(lst_data,
@@ -389,75 +403,63 @@ def stack_tir(scene_urls,aoi,aoi_crs,
                             fill_value=np.nan) #.filled()
 
         # After masking, reproject
-        # Actually I don't think this is necessary if they share a CRS
+        # not necessary if they share a CRS
         if counter > 0:
-            assert tir.crs == prev_crs
-        prev_crs = tir.crs
+            assert tir_crs == prev_crs
+        prev_crs = tir_crs
 
         # Now do some normalisation
         if subtract_air_temp:
             filename = scene_tir.split('/')[-1]
             datestring = filename.split('_')[3]
-            # month = int(datestring[4:6])
+
+            atscene = met_climate.dummy_scene( 
+                tir_crs, tir_trans, aoi_box,(stack_height,stack_width))
+
+            import pdb; pdb.set_trace()
+            # Unclear why the following fails.
             atdata = at.grid_temp_over_scene(
-                tir, datestring, interpolation='linear')
+                atscene, datestring, interpolation='linear')
             atdata = atdata[rowmin:rowmax,colmin:colmax]
             assert lst_data_mask_all.shape == atdata.shape
-#                         lst_data_mask_all = lst_data_mask_all - atdata
             lst_data_mask_all = ma.array(
                             lst_data_mask_all - atdata,
                             mask=mask_all,
                             fill_value=np.nan)
-
-            colorbar_label = 'Degrees relative to air temp on this day'
-            colorbar_vmin,colorbar_vmax = -5,15
             
             if subtract_median_lst:
                 # ALSO subtract median xLST
                 medval = ma.median(lst_data_mask_all)
-#                             lst_data_mask_all = lst_data_mask_all - medval
                 lst_data_mask_all = ma.array(
                             lst_data_mask_all - medval,
                             mask=mask_all,
                             fill_value=np.nan)
                 
-                colorbar_label = 'Degrees relative to air temp on this day, subtracting median'
-                colorbar_vmin,colorbar_vmax = -5,15
-            
-#                         fig,ax1 = plt.subplots(figsize=(10,10))
-#                         cbpos = [0.28,0.92,0.25,0.02]
-#                         inset2=fig.add_axes(cbpos,frameon=True,clip_on=True)
-
-#                         im2 = ax1.imshow(atdata,cmap='CMRmap')
-#                         CB2 = fig.colorbar(im2, orientation='horizontal', ax=ax1, cax=inset2)
-#                         CB2.set_label('Deg C')
-
-#                         fig.suptitle('Air Temp',fontsize='large')
-
         elif subtract_median_lst:
             # Subtract median LST from scene (within QA mask) 
         
             medval = ma.median(lst_data_mask_all)
-#                         lst_data_mask_all = lst_data_mask_all - medval
             lst_data_mask_all = ma.array(
                         lst_data_mask_all - medval,
                         mask=mask_all,
                         fill_value=np.nan)
-
-            colorbar_label = 'Degrees relative to air temp on this day, subtracting median'
-            colorbar_vmin,colorbar_vmax = -5,15
-    
-            colorbar_label = 'Degrees relative to median'
-            colorbar_vmin,colorbar_vmax = -5,15
-        
-        else:
-            colorbar_label = 'Degrees Centigrade'
-            colorbar_vmin,colorbar_vmax = -5,15
         
         # Then add to stack
         lst_stack[counter,:,:] = lst_data_mask_all
 
-    return lst_stack
+    # Make profile for file output
+    N_layers = counter+1
+    tir_profile.update(
+        dtype=rasterio.float64,
+        width=stack_width,
+        height=stack_height,
+        transform=tir_trans,
+        count=N_layers,
+        compress='lzw'
+        )
+
+
+    return lst_stack, tir_profile
 
 def main(*args,diagnostics=False):
     """Main function
@@ -468,12 +470,14 @@ def main(*args,diagnostics=False):
         date_label,         # '2014-2016'
         dates_of_interest,  # [['20141101','20150228'],['20151101','20160228']]
         pathrows            # [['202','023'],['203','023']]
+        max_cloud           # 70
+        cloud_mask_bits     # [0,1,4,8,10]
         )
     diagnostics = whether to make images showing the QA masks and RGB images 
         of each scene
 
     """
-    date_label,place_label,dates_of_interest,pathrows,max_cloud = args
+    date_label,place_label,dates_of_interest,pathrows,max_cloud,cloud_mask_bits = args
     assert type(place_label)==str and len(place_label)>0
     assert type(date_label)==str and len(date_label)>0
     assert len(dates_of_interest)>0
@@ -524,8 +528,8 @@ def main(*args,diagnostics=False):
             
             scenes += myscenes
             scene_dates += mydates
-            # break
-        # break 
+            break
+        break 
 
     sort = np.argsort(scene_dates)
     scene_urls = np.array([scenebucket.https_stub + s for s in np.array(scenes)[sort]])
@@ -593,15 +597,57 @@ def main(*args,diagnostics=False):
     """
     QA-mask and Aggregate time-series of LST
     """
+
     #counties = counties.to_crs(scene.crs)
+    print('Stacking TIR data...')
+    
+    products = ['xLST','rLST','rxLST']
+    
+    for product_name in products:
 
-    rlst_stack = stack_tir(scene_urls,county_bounds,county_crs,
-                           subtract_median_lst=True,subtract_air_temp=False
-                           )
-                           
+        print('Producing {}'.format(product_name))
+        lst_stack,profile = stack_tir(scene_urls,cloud_mask_bits,
+                               county_bounds,county_crs,
+                               subtract_median_lst=('r' in product_name),
+                               subtract_air_temp=('x' in product_name)
+                               )
+        
+        lst_count = lst_stack.count(axis=0)
+        lst_mean = ma.array(lst_stack.mean(axis=0),
+                            mask=~(lst_count>0),
+                            fill_value=np.nan
+                            ).filled()
+        lst_var = ma.array(lst_stack.var(axis=0),
+                            mask=~(lst_count>0),
+                            fill_value=np.nan
+                            ).filled()
+        
+        """
+        Output the stack data
+        """
+        print('Outputting stacked heat maps as raster')
+        import pdb; pdb.set_trace()
+            
+        with rasterio.Env():
+            filename = output_plot_dir+'{}_stack.tif'.format(product_name)
+            with rasterio.open(filename, 'w', **profile) as dst:
+                dst.write(lst_stack)
+                print(filename)
+                
+            profile.update(count=1)
+            
+            filename = output_plot_dir+'{}_mean.tif'.format(product_name)
+            with rasterio.open(filename, 'w', **profile) as dst:
+                dst.write(lst_mean.reshape([1,lst_stack.shape[1],lst_stack.shape[2]]))
+                print(filename)
+                
+            filename = output_plot_dir+'{}_var_n.tif'.format(product_name)
+            with rasterio.open(filename, 'w', **profile) as dst:
+                dst.write((lst_var/lst_count).reshape([1,lst_stack.shape[1],lst_stack.shape[2]]))
+                print(filename)
+        
 
-
-
+    print('All done')
 
 
 
@@ -617,6 +663,7 @@ if __name__ == '__main__':
     date_label = '2014-2016'
     place_label = 'derbyshire'
     max_cloud = 70.0
+    cloud_mask_bits = [0,1,4,8,10]
 
     if date_label=='2013-2014':
         dates_of_interest = [['20131101','20140228']]
@@ -634,6 +681,6 @@ if __name__ == '__main__':
     else:
         pathrows =[]
     
-    params = (date_label,place_label,dates_of_interest,pathrows,max_cloud)
+    params = (date_label,place_label,dates_of_interest,pathrows,max_cloud,cloud_mask_bits)
 
     main(*params)

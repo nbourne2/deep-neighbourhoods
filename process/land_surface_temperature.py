@@ -14,11 +14,13 @@ NB edits:
    since downsampling not required for Landsat if transform and crs are equal
  - pass metadata path as arg so that metadata keys can be used to convert 
    DNs to radiance 
+ - Added ability to read remote file over http using urllib
 
 """
 import re
 from rasterio.warp import reproject, Resampling
 import numpy as np
+from urllib.request import urlopen
 
 TIRS_WAVELENGTH = 10.895e-6  # average wavelength of TIRS band
 NDVI_SOIL = 0.2  # from Avdan et al.
@@ -58,12 +60,17 @@ def read_metadata(path):
     """Read key/value pairs from Landsat metadata text file. Returns
     dictionary with abbreviated keys.
     
-    NB change: pass metadata path as arg
+    NB changes: pass metadata path as arg
+        + allow url option
     """
-    
-    with open(path) as f:
-        metadata = f.read()
-    
+    if path[:4] == 'http':
+        with urlopen(path) as f:
+            metadata = f.read()
+            metadata = metadata.decode('ascii')
+    else:    
+        with open(path) as f:
+            metadata = f.read()
+
     key_lookup = {'RADIANCE_MAXIMUM_BAND_10': 'lmax',
                   'RADIANCE_MINIMUM_BAND_10': 'lmin',
                   'QUANTIZE_CAL_MAX_BAND_10': 'qcalmax',

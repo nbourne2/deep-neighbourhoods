@@ -59,7 +59,7 @@ def aoi_scene_intersection(aoi, scene):
     shapely Polygon
     """
     scnbox = box(minx=scene.bounds.left,maxx=scene.bounds.right,miny=scene.bounds.top,maxy=scene.bounds.bottom)
-    aoibox = box(minx=aoi.minx,maxx=aoi.maxx,miny=aoi.miny,maxy=aoi.maxy)
+    aoibox = box(minx=aoi['minx'],maxx=aoi['maxx'],miny=aoi['miny'],maxy=aoi['maxy'])
     intersect = scnbox.intersection(aoibox)
     return intersect
 
