@@ -65,24 +65,16 @@ import land_surface_temperature as lst
 import met_climate
 from common import raster_utils as ru
 from common import geoplot as gpl
-        
-# GLOBALS
-rootdir = '/Users/nathan.bourne/data/thermcert/'
-tirband = '10'
-qaband = 'QA'
-bband = '2'
-gband = '3'
-rband = '4'
-nband = '5'
-
-products = ['xLST','rLST','rxLST','xrLST']
-    
-landcover_file = rootdir+'copernicus/land_cover/g100_clc12_V18_5.tif'
-lsoa_file = rootdir+'uk_data/astrosat_data/lsoa_with_gas_and_electricity.geojson'
-uk_counties_shapefile = rootdir+'uk_data/counties_and_ua_boundaries/'\
-    +'Counties_and_Unitary_Authorities_December_2015_Generalised_Clipped_'\
-    +'Boundaries_in_England_and_Wales.shp'
-ceda_username = 'nbourne'
+ 
+# GLOBALS defined here
+import config as cf  
+rootdir = cf.rootdir
+tirband = cf.tirband
+qaband = cf.qaband 
+bband = cf.bband
+gband = cf.gband
+rband = cf.rband
+nband = cf.nband
 
 def parse_metadata(lines):
     objects = {}
@@ -227,7 +219,7 @@ def display_qamask(scene_url,output_plot_dir,cloud_mask_bits,**aoi_kwargs):
     return
 
 def display_rgb(scene_url,output_plot_dir,**aoi_kwargs):
-
+    
     filename = output_plot_dir + \
                 scene_url.split('/')[-1].replace(
                     f'B{tirband}.TIF','RGB.png'
@@ -293,7 +285,7 @@ def stack_tir(scene_urls,cloud_mask_bits,aoi,aoi_crs,
     """
     if subtract_air_temp:
         ceda_password = get_ceda_password()
-        at = met_climate.access_ukcp09(ceda_username,ceda_password)
+        at = met_climate.access_ukcp09(cf.ceda_username,ceda_password)
 
     
     # with rasterio.open(scene_bqa) as bqa:
@@ -478,7 +470,7 @@ def subtract_mean_at(meanlstfile,dates_of_interest):
     profile = rasterio profile of meanlstfile
     """
     ceda_password = get_ceda_password()
-    at = met_climate.access_ukcp09(ceda_username,ceda_password)
+    at = met_climate.access_ukcp09(cf.ceda_username,ceda_password)
 
     # work out which months are within the dates of interest
     first_month = int(max([
@@ -522,7 +514,7 @@ def subtract_mean_at(meanlstfile,dates_of_interest):
     xrlst_mean = ma.array(lst_mean - at_mean,
                           mask=lst_mean==np.nan, # ==0
                           fill_value=np.nan).filled()
-return xrlst_mean, profile
+    return xrlst_mean, profile
 
 def main(*args,diagnostics=False):
     """Main function
@@ -559,7 +551,7 @@ def main(*args,diagnostics=False):
     Define the AoI based on County data
     """
     county_string = place_label+'*'
-    counties = gpd.read_file(uk_counties_shapefile) 
+    counties = gpd.read_file(cf.uk_counties_shapefile) 
     county_ind = np.where(counties['ctyua15nm'].str.match(
         county_string,case=False,na=False))[:][0]
     print('County in shapefile: ',county_ind,
@@ -665,7 +657,7 @@ def main(*args,diagnostics=False):
     print('Stacking TIR data...')
     
     # check that 'rLST' is produced before 'xrLST'
-    global products
+    products = cf.products
     if ('xrLST' in products) and not ('rLST' in products):
         products = ['rLST'] + products
     elif (np.flatnonzero('xrLST' == np.array(products))[0]
