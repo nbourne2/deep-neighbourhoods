@@ -75,6 +75,8 @@ gband = '3'
 rband = '4'
 nband = '5'
 
+products = ['xLST','rLST','rxLST','xrLST']
+    
 landcover_file = rootdir+'copernicus/land_cover/g100_clc12_V18_5.tif'
 lsoa_file = rootdir+'uk_data/astrosat_data/lsoa_with_gas_and_electricity.geojson'
 uk_counties_shapefile = rootdir+'uk_data/counties_and_ua_boundaries/'\
@@ -275,7 +277,7 @@ def display_rgb(scene_url,output_plot_dir,**aoi_kwargs):
 
 def get_ceda_password():
     f = open(rootdir+'uk_data/ceda_password.txt')
-    content = f.readline()
+    content = f.readline().strip()
     f.close()
     return content
 
@@ -317,7 +319,7 @@ def stack_tir(scene_urls,cloud_mask_bits,aoi,aoi_crs,
         scene_nir = scene_url.replace('B'+tirband,'B'+nband)
         scene_metadata = scene_url.replace('B'+tirband+'.TIF','MTL.txt')
 
-        print('Reading scene {}'.format(counter))
+        print('Reading scene {}'.format(counter+1))
         try:
             with rasterio.open(scene_bqa) as bqa:
                 print(scene_bqa)
@@ -416,8 +418,8 @@ def stack_tir(scene_urls,cloud_mask_bits,aoi,aoi_crs,
             atscene = met_climate.dummy_scene( 
                 tir_crs, tir_trans, aoi_box,(stack_height,stack_width))
 
-            import pdb; pdb.set_trace()
-            # Unclear why the following fails.
+            # import pdb; pdb.set_trace()
+            # If the following fails, it may mean there was a problem setting up the session
             atdata = at.grid_temp_over_scene(
                 atscene, datestring, interpolation='linear')
             atdata = atdata[rowmin:rowmax,colmin:colmax]
@@ -460,6 +462,67 @@ def stack_tir(scene_urls,cloud_mask_bits,aoi,aoi_crs,
 
 
     return lst_stack, tir_profile
+
+def subtract_mean_at(meanlstfile,dates_of_interest):
+    """With existing 'rLST' product, subtract mean AT over range of months
+    
+    Inputs: 
+    meanlstfile = where to find the rLST_mean data
+    dates_of_interest = list of dates enclosing seasons of interest 
+        eg [['20101101','20110228']]
+        These must be strings formatted as YYYYMMDD 
+        and the list must have two dimensions
+
+    Return: 
+    lst_mean = mean xrLST = rLST - mean(AT)
+    profile = rasterio profile of meanlstfile
+    """
+    ceda_password = get_ceda_password()
+    at = met_climate.access_ukcp09(ceda_username,ceda_password)
+
+    # work out which months are within the dates of interest
+    first_month = int(max([
+        dates_of_interest[a][0][4:6] 
+        for a in range(np.shape(dates_of_interest)[0])
+    ]))
+    last_month = int(max([
+        dates_of_interest[a][1][4:6] 
+        for a in range(np.shape(dates_of_interest)[0])
+    ]))
+    if first_month>last_month:
+        months = list(range(first_month,13)) + list(range(1,last_month+1))
+    else:
+        months = list(range(first_month,last_month+1))
+
+    # get the LST data that we are to subtract the AT from
+    with rasterio.open(meanlstfile) as lstdata: 
+        profile = lstdata.profile
+        lst_mean = lstdata.read()
+
+        at_stack = np.zeros([len(months),lst_mean.shape[1],lst_mean.shape[2]])
+
+        # Get mean AT in each month
+        for ii in range(len(months)):
+            month = months[ii]
+            atdata = at.grid_temp_over_scene(
+                lstdata, month, interpolation='linear')
+            try:
+                assert at_stack[ii,:,:].shape == atdata.shape
+            except:
+                import pdb; pdb.set_trace()
+            at_stack[ii,:,:] = atdata
+
+    # average over the months
+    at_mean = at_stack.mean(axis=0).reshape([1,at_stack.shape[1],at_stack.shape[2]])
+    try:
+        assert lst_mean.shape == at_mean.shape 
+    except:
+        import pdb; pdb.set_trace()
+
+    xrlst_mean = ma.array(lst_mean - at_mean,
+                          mask=lst_mean==np.nan, # ==0
+                          fill_value=np.nan).filled()
+return xrlst_mean, profile
 
 def main(*args,diagnostics=False):
     """Main function
@@ -528,8 +591,8 @@ def main(*args,diagnostics=False):
             
             scenes += myscenes
             scene_dates += mydates
-            break
-        break 
+            # break
+        # break 
 
     sort = np.argsort(scene_dates)
     scene_urls = np.array([scenebucket.https_stub + s for s in np.array(scenes)[sort]])
@@ -601,38 +664,55 @@ def main(*args,diagnostics=False):
     #counties = counties.to_crs(scene.crs)
     print('Stacking TIR data...')
     
-    products = ['xLST','rLST','rxLST']
-    
+    # check that 'rLST' is produced before 'xrLST'
+    global products
+    if ('xrLST' in products) and not ('rLST' in products):
+        products = ['rLST'] + products
+    elif (np.flatnonzero('xrLST' == np.array(products))[0]
+          < np.flatnonzero('rLST' == np.array(products))[0]):
+        products = (['rLST'] 
+            + list(np.array(products)[
+                np.flatnonzero('rLST' != np.array(products))]
+            )
+        )
+
     for product_name in products:
 
         print('Producing {}'.format(product_name))
-        lst_stack,profile = stack_tir(scene_urls,cloud_mask_bits,
-                               county_bounds,county_crs,
-                               subtract_median_lst=('r' in product_name),
-                               subtract_air_temp=('x' in product_name)
-                               )
         
-        lst_count = lst_stack.count(axis=0)
-        lst_mean = ma.array(lst_stack.mean(axis=0),
-                            mask=~(lst_count>0),
-                            fill_value=np.nan
-                            ).filled()
-        lst_var = ma.array(lst_stack.var(axis=0),
-                            mask=~(lst_count>0),
-                            fill_value=np.nan
-                            ).filled()
+        if product_name!='xrLST':
+            lst_stack,profile = stack_tir(scene_urls,cloud_mask_bits,
+                                   county_bounds,county_crs,
+                                   subtract_median_lst=('r' in product_name),
+                                   subtract_air_temp=('x' in product_name)
+                                   )
+
+            lst_count = lst_stack.count(axis=0)
+            lst_mean = ma.array(lst_stack.mean(axis=0),
+                                mask=~(lst_count>0),
+                                fill_value=np.nan
+                                ).filled()
+            lst_var = ma.array(lst_stack.var(axis=0),
+                                mask=~(lst_count>0),
+                                fill_value=np.nan
+                                ).filled()
         
+        else:
+            meanlstfile = output_plot_dir+'rLST_mean.tif'
+            lst_mean,profile = subtract_mean_at(meanlstfile,dates_of_interest)
+            
         """
         Output the stack data
         """
         print('Outputting stacked heat maps as raster')
-        import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
             
         with rasterio.Env():
-            filename = output_plot_dir+'{}_stack.tif'.format(product_name)
-            with rasterio.open(filename, 'w', **profile) as dst:
-                dst.write(lst_stack)
-                print(filename)
+            if product_name!='xrLST':
+                filename = output_plot_dir+'{}_stack.tif'.format(product_name)
+                with rasterio.open(filename, 'w', **profile) as dst:
+                    dst.write(lst_stack)
+                    print(filename)
                 
             profile.update(count=1)
             
@@ -641,10 +721,11 @@ def main(*args,diagnostics=False):
                 dst.write(lst_mean.reshape([1,lst_stack.shape[1],lst_stack.shape[2]]))
                 print(filename)
                 
-            filename = output_plot_dir+'{}_var_n.tif'.format(product_name)
-            with rasterio.open(filename, 'w', **profile) as dst:
-                dst.write((lst_var/lst_count).reshape([1,lst_stack.shape[1],lst_stack.shape[2]]))
-                print(filename)
+            if product_name!='xrLST':
+                filename = output_plot_dir+'{}_var_n.tif'.format(product_name)
+                with rasterio.open(filename, 'w', **profile) as dst:
+                    dst.write((lst_var/lst_count).reshape([1,lst_stack.shape[1],lst_stack.shape[2]]))
+                    print(filename)
         
 
     print('All done')
