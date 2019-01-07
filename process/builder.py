@@ -28,16 +28,18 @@ Procedure:
 
 Usage:
 import builder
-params = ()
+params = (date_label,place_label,dates_of_interest,pathrows,max_cloud,cloud_mask_bits)
+# See bottom of module for how to set up these arguments
 builder.main(params)
 
 
 Dependencies:
 land_surface_temperature
-raster_utils
 landsat
-
-
+met_climate
+common/raster_utils
+common/geoplot
+config
 
 This is all based on the original procedure in LSOA_LST_builder.ipynb
 """
@@ -314,22 +316,22 @@ def stack_tir(scene_urls,cloud_mask_bits,aoi,aoi_crs,
         print('Reading scene {}'.format(counter+1))
         try:
             with rasterio.open(scene_bqa) as bqa:
-                print(scene_bqa)
+                #print(scene_bqa)
                 bqa_data,bqa_trans = ru.read_in_aoi(bqa,aoi=aoi,aoi_crs=aoi_crs)
 
             with rasterio.open(scene_tir) as tir:
-                print(scene_tir)
+                #print(scene_tir)
                 tir_data,tir_trans = ru.read_in_aoi(tir,aoi=aoi,aoi_crs=aoi_crs)
                 tir_crs = tir.crs
                 tir_profile = tir.profile
 
             with rasterio.open(scene_red) as red:
-                print(scene_red)
+                #print(scene_red)
                 red_data,red_trans = ru.read_in_aoi(red,aoi=aoi,aoi_crs=aoi_crs)
                 red_crs = red.crs
 
             with rasterio.open(scene_nir) as nir:
-                print(scene_nir)
+                #print(scene_nir)
                 nir_data,nir_trans = ru.read_in_aoi(nir,aoi=aoi,aoi_crs=aoi_crs)
         
         except OSError as e:
