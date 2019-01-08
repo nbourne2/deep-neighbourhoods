@@ -8,8 +8,10 @@ gband = '3'
 rband = '4'
 nband = '5'
 
-products = ['xLST','rLST','rxLST','xrLST']
-    
+products_label = 'allLST_clc12'
+
+products = ['rLST']#['xLST','rLST','rxLST','xrLST']
+
 landcover_file = rootdir+'copernicus/land_cover/g100_clc12_V18_5.tif'
 lsoa_file = rootdir+'uk_data/astrosat_data/lsoa_with_gas_and_electricity.geojson'
 uk_counties_shapefile = rootdir+'uk_data/counties_and_ua_boundaries/'\
@@ -17,3 +19,6 @@ uk_counties_shapefile = rootdir+'uk_data/counties_and_ua_boundaries/'\
     +'Boundaries_in_England_and_Wales.shp'
 
 ceda_username = 'nbourne'
+ceda_password_file = rootdir+'uk_data/ceda_password.txt'
+
+diagnostics = True

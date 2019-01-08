@@ -93,7 +93,8 @@ def choropleth(axes, gdf,
         facecolor='None',
         edgecolor='k',
         linewidth=0.5,
-        titlesize=15
+        titlesize=15,
+        **plot_kwargs
     ):
     """
     Display choropleth of vector data
@@ -132,7 +133,7 @@ def choropleth(axes, gdf,
 
     if no_choropleth:
         base = gdf.plot(ax=axes, color=facecolor, edgecolor=edgecolor,
-                        linewidth=linewidth)
+                        linewidth=linewidth, **plot_kwargs)
     else:
 
         # 1. clean input (NaN, None, numpy.mask)
@@ -151,7 +152,8 @@ def choropleth(axes, gdf,
             base = gdf.plot(column=colname, ax=axes, 
                                         cmap=colormap,
                                         vmin=vmin,vmax=vmax,
-                                        edgecolor='k',linewidth=0.2)
+                                        edgecolor='k',linewidth=0.2,
+                                        **plot_kwargs)
 
 
     # 5. set ticks, labels and title
@@ -325,7 +327,8 @@ def colorbar(axes,Norm,
         isdate=False,
         label='',
         ticks=4,
-        locbottom=False
+        locbottom=False,
+        cbpos=None
     ):
     """
     Make a colorbar for a previously plotted image/choropleth
@@ -355,10 +358,11 @@ def colorbar(axes,Norm,
     else:
         Aaxes=axes
 
-    if locbottom:
-        cbpos = [Aaxes.get_position().xmin,0.01,Aaxes.get_position().width,0.02]
-    else:
-        cbpos = [Aaxes.get_position().xmin,0.97,Aaxes.get_position().width,0.02]
+    if cbpos is None:
+        if locbottom:
+            cbpos = [Aaxes.get_position().xmin,0.01,Aaxes.get_position().width,0.02]
+        else:
+            cbpos = [Aaxes.get_position().xmin,0.97,Aaxes.get_position().width,0.02]
 
 
     # 2. determine vmin, vmax 
