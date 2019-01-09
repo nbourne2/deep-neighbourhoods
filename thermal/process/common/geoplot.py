@@ -225,6 +225,7 @@ def raster(axes, im,
            no_axes_ticks=True,
            use_rst_plot=True,
            titlesize=15,
+           clean_data=True,
            **clahe_equalize_kwargs
     ):
     """
@@ -266,10 +267,11 @@ def raster(axes, im,
 
     # 1. clean input (NaN, None, numpy.mask)
     data = np.squeeze(im).copy()
-    Nans = np.array(~np.isfinite(data))
-    Nones = np.array(data is None)
-    datamask = (Nans | Nones)
-    data = ma.array(data,mask=datamask,fill_value=np.nan).filled()
+    if clean_data:
+        Nans = np.array(~np.isfinite(data))
+        Nones = np.array(data is None)
+        datamask = (Nans | Nones)
+        data = ma.array(data,mask=datamask,fill_value=np.nan).filled()
 
     # 2. determine vmin/vmax, eg from input or percentiles
     if vmin is None:
@@ -277,8 +279,9 @@ def raster(axes, im,
     if vmax is None:
         vmax = np.nanpercentile(data,pmax)
 
-    data = np.where(data>=vmin,data,vmin)
-    data = np.where(data<=vmax,data,vmax)
+    if clean_data:
+        data = np.where(data>=vmin,data,vmin)
+        data = np.where(data<=vmax,data,vmax)
 
     # 3. normalise data
     # There are three options:

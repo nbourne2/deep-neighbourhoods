@@ -65,9 +65,10 @@ from scipy.ndimage import convolve, filters
 import landsat
 import land_surface_temperature as lst
 import met_climate
+import corine
 from common import raster_utils as ru
 from common import geoplot as gpl
-from diagnostics import display_qamask, display_rgb, display_agg_lst, display_agg_lst2, display_lulc
+import diagnostics as diag
 
 # GLOBALS defined here
 import config as cf  
@@ -402,12 +403,12 @@ def main(*args):
         print('Warning: output directory exists and will be overwritten: ' 
                 +'{}'.format(output_plot_dir))
 
-
+    output_list = []
     """
     Define the AoI based on County data
     """
     county_string = place_label+'*'
-    counties = gpd.read_file(cf.uk_counties_shapefile) 
+    counties = gpd.read_file(cf.uk_counties_shapefile)
     county_ind = np.where(counties['ctyua15nm'].str.match(
         county_string,case=False,na=False))[:][0]
     print('County in shapefile: ',county_ind,
@@ -445,8 +446,9 @@ def main(*args):
     sort = np.argsort(scene_dates)
     scene_urls = np.array([scenebucket.https_stub + s for s in np.array(scenes)[sort]])
     scene_dates = np.array(scene_dates)[sort]
-
-    print('Total {} scenes found'.format(len(scene_urls)))
+    
+    N_scenes = len(scene_urls)
+    print('Total {} scenes found'.format(N_scenes))
 
     meta_urls = np.array([s.replace('B10.TIF','MTL.txt') for s in scene_urls])
 
@@ -479,22 +481,24 @@ def main(*args):
     meta_list = meta_list[good_cloud]
     scenes_table = scenes_table.iloc[good_cloud]
     
+    N_good_scenes = len(scene_urls)
     print('Found {} scenes with land cloud cover <= {}%'.format(
-            len(scene_urls),max_cloud))
+            N_good_scenes,max_cloud))
 
     """
     Output table of what we're going to use
     """
     scenes_table.to_csv(output_plot_dir+'scenes_list.dat',sep=' ')
-
+    output_list += [output_plot_dir+'scenes_list.dat']
     """
     Make RGB images
     """
     if diagnostics:
         print('Making RGB images')
         for scene_url in scene_urls:
-            display_rgb(scene_url,output_plot_dir,
+            diag.display_rgb(scene_url,output_plot_dir,
                         aoi=county_bounds,aoi_crs=county_crs)
+        output_list += [output_plot_dir+'*RGB.png']
 
     """
     Make QA images
@@ -502,8 +506,9 @@ def main(*args):
     if diagnostics:
         print('Making QA/TIR images')
         for scene_url in scene_urls:
-            display_qamask(scene_url,output_plot_dir,
+            diag.display_qamask(scene_url,output_plot_dir,cloud_mask_bits,
                            aoi=county_bounds,aoi_crs=county_crs)
+        output_list += [output_plot_dir+'*_mask_check.png']
 
     """
     QA-mask and Aggregate time-series of LST
@@ -513,15 +518,16 @@ def main(*args):
     
     # check that 'rLST' is produced before 'xrLST'
     products = cf.products
-    if ('xrLST' in products) and not ('rLST' in products):
-        products = ['rLST'] + products
-    elif (np.flatnonzero('xrLST' == np.array(products))[0]
-          < np.flatnonzero('rLST' == np.array(products))[0]):
-        products = (['rLST'] 
-            + list(np.array(products)[
-                np.flatnonzero('rLST' != np.array(products))]
+    if ('xrLST' in products):
+        if not ('rLST' in products):
+            products = ['rLST'] + products
+        elif (np.flatnonzero('xrLST' == np.array(products))[0]
+              < np.flatnonzero('rLST' == np.array(products))[0]):
+            products = (['rLST'] 
+                + list(np.array(products)[
+                    np.flatnonzero('rLST' != np.array(products))]
+                )
             )
-        )
 
     for product_name in products:
 
@@ -560,6 +566,7 @@ def main(*args):
                 with rasterio.open(filename, 'w', **profile) as dst:
                     dst.write(lst_stack)
                     print(filename)
+                    output_list += [filename]
                 
             profile.update(count=1)
             
@@ -567,33 +574,20 @@ def main(*args):
             with rasterio.open(filename, 'w', **profile) as dst:
                 dst.write(lst_mean.reshape([1,lst_stack.shape[1],lst_stack.shape[2]]))
                 print(filename)
+                output_list += [filename]
                 
             if product_name!='xrLST':
                 filename = output_plot_dir+'{}_var_n.tif'.format(product_name)
                 with rasterio.open(filename, 'w', **profile) as dst:
                     dst.write((lst_var/lst_count).reshape([1,lst_stack.shape[1],lst_stack.shape[2]]))
                     print(filename)
+                    output_list += [filename]
         
     if diagnostics:
         print('Making LST comparison images')
-        
-        np = len(products)
-        fig,axes = gpl.make_figure(shape=(1,np),figsize=(6.5*np,10))
-
-        for ii in range(np):
-            ax=axes[ii]
-            filename = output_plot_dir+'{}_mean.tif'.format(products[ii])
-
-            with rasterio.open(filename) as lstdata:
-                lst_data1 = lstdata.read()[0,:,:]
-                lst_trans1 = lstdata.transform
-                
-                ax,nm = gpl.raster(ax, lst_data1, transform=lst_trans1,
-                           title=filename.split('/')[-1], colormap='afmhot')
-                
-                cb = gpl.colorbar(ax, nm, colormap='afmhot')
-
-        plt.savefig(output_plot_dir+'_'.join(products)+'_comp.png')
+        output_filename = output_plot_dir+'_'.join(products)+'_comp.png'
+        diag.display_lst_comparison(products,output_plot_dir,output_filename)
+        output_list += [output_filename]
 
     print('Moving on to vectorization')
     
@@ -606,14 +600,16 @@ def main(*args):
     scene_file = output_plot_dir+'{}_mean.tif'.format(products[0])
     corine.reproject_raster(cf.landcover_file,scene_file,lulc_clip_file)
     print(lulc_clip_file)
-    landcover_mask1,landcover_mask2 = corine.mask_raster(
+    output_list += [lulc_clip_file]
+
+    landcover_data,landcover_mask1,landcover_mask2 = corine.mask_raster(
         lulc_clip_file,output_plot_dir)
 
     if diagnostics:
         print('Making LULC mask comparison images')
-        import pdb; pdb.set_trace()
-        display_lulc(landcover_data,landcover_mask1,landcover_mask2,output_plot_dir)
-
+        # import pdb; pdb.set_trace()
+        diag.display_lulc(landcover_data.astype(np.float),landcover_mask1,landcover_mask2,output_plot_dir)
+        output_list += [output_plot_dir+'Land_Cover_C6.pdf',output_plot_dir+'Land_Cover_C30.pdf']
 
 
     """
@@ -624,10 +620,12 @@ def main(*args):
     
     with rasterio.open(scene_file) as scene:
         lsoa = lsoa.to_crs(scene.crs) 
-        transform_aoi = ru.rst_transform(src)
-        aoi_left, aoi_bottom, aoi_right, aoi_top = scene.bounds
+        transform_aoi = ru.rst_transform(scene)
+        aoi_bounds = scene.bounds
+        aoi_left, aoi_bottom, aoi_right, aoi_top = aoi_bounds
 
     lsoa_in_aoi = lsoa.cx[aoi_left:aoi_right,aoi_bottom:aoi_top]
+    N_lsoa_in_aoi = len(lsoa_in_aoi)
 
     """
     Aggregate all of the the rLST,xLST,rxLST,xrLST maps, masking for land use
@@ -638,7 +636,7 @@ def main(*args):
     for product_name in products:
         filename = output_plot_dir+'{}_mean.tif'.format(product_name)
         
-        with rst.open(filename) as thislstmap:
+        with rasterio.open(filename) as thislstmap:
             this_lst_mean = thislstmap.read()[0,:,:]
             this_lst_mean_masked_lc1 = ma.array(
                 this_lst_mean, 
@@ -647,13 +645,8 @@ def main(*args):
             ).filled()
         
         if diagnostics:
-            import pdb; pdb.set_trace()
-            display_agg_lst(this_lst_mean,
-                            landcover_mask1,
-                            landcover_mask2,
-                            output_plot_dir+'{}_LSOA_agg_panels.pdf'.format(product_name)
-                            )
-            display_agg_lst2(this_lst_mean,
+            # import pdb; pdb.set_trace()
+            diag.display_agg_lst(lsoa_in_aoi,transform_aoi,aoi_bounds,this_lst_mean,
                             landcover_mask1,
                             landcover_mask2,
                             output_plot_dir+'{}_LSOA_agg_panels2.pdf'.format(product_name)
@@ -676,7 +669,9 @@ def main(*args):
     
     if diagnostics:
         print('Made LULC mask comparison images')
-        
+        output_list += [output_plot_dir+'*_LSOA_agg_panels.pdf']
+        output_list += [output_plot_dir+'*_LSOA_agg_panels2.pdf']
+    
 
     print('Defining Urban/Rural classifications')        
     """Classify LSOA cells as urban/rural based on landcover map"""
@@ -694,29 +689,19 @@ def main(*args):
 
     if diagnostics:
         # mask for plot:
-        lsoa_new = lsoa_lst_lc_in_aoi.iloc[np.where(lcmean.mask==False)]
-            
-        import pdb; pdb.set_trace()
-        fig,ax = gpl.make_figure(figsize=(6,10))
-
-        ax,nm = gpl.choropleth(
-                    ax,lsoa_new,colname='LC_urban',
-                    cmap='viridis',scheme='equal_interval',
-                    vmin=-0.8, vmax=1,
-                    edgecolor='k',linewidth=0.2,
-                    title='Urban/rural classification by dominant land cover'
-                    )
-        gpl.zoom_to_data(ax,lsoa_new)
-        fig.savefig(output_plot_dir+'Urban_Rural.pdf')
+        lsoa_new = lsoa_lst_lc_in_aoi.iloc[np.where(lcmean.mask==False)]    
+        # import pdb; pdb.set_trace()
+        diag.display_urban_rural(lsoa_new,aoi_bounds,output_plot_dir+'Urban_Rural.pdf')
+        output_list += [output_plot_dir+'Urban_Rural.pdf']
 
     print('Defining geographical stats to add to database')
     """Compute some geographical properties of the LSOAs to include in the output vector"""
 
     zslc = zonal_stats(lsoa_in_aoi, ~landcover_mask1, affine=transform_aoi, stats=['sum','count'])
 
-    lc_unmasked_frac = np.zeros(len(lsoa_in_aoi))
+    lc_unmasked_frac = np.zeros(N_lsoa_in_aoi)
 
-    for ii in range(len(lsoa_in_aoi)):
+    for ii in range(N_lsoa_in_aoi):
         if zslc[ii]['sum'] is not None:
             lc_unmasked_frac[ii] = float(zslc[ii]['sum'])/float(zslc[ii]['count'])
 
@@ -726,14 +711,49 @@ def main(*args):
         )
     
     print('Final vector file output')
-    output_filename1 = output_plot_dir+'lsoa_{}_{}.geojson'.format(
+    output_filename = output_plot_dir+'lsoa_{}_{}.geojson'.format(
         place_label,cf.products_label)
-    print(filename1)
-    lsoa_lst_lc_in_aoi.to_file(filename1)
+    print(output_filename)
+    if len(glob.glob(output_filename))>0:
+        os.system('rm -rf '+output_filename)
+        import pdb; pdb.set_trace()
+    lsoa_lst_lc_in_aoi.to_file(output_filename,driver='GeoJSON')
+    output_list += [output_filename]
+
+    print('Output log of config')
+    log_filename = output_plot_dir+'lsoa_{}_{}.log'.format(
+        place_label,cf.products_label)
+    cfdict = OrderedDict({
+        'INPUTS': '',
+        'dates_of_interest': dates_of_interest,
+        'pathrows': pathrows,
+        'cf.uk_counties_shapefile': cf.uk_counties_shapefile,
+        'county_ind': county_ind,
+        'ctyua15nm': counties.iloc[county_ind]['ctyua15nm'].values,
+        'county_bounds': county_bounds,
+        'county_crs': county_crs,
+        'cf.tirband':cf.tirband,
+        'max_cloud': max_cloud,
+        'N_scenes': N_scenes,
+        'N_good_scenes': N_good_scenes,
+        'cloud_mask_bits': cloud_mask_bits,
+        'cf.landcover_file': cf.landcover_file,
+        'cf.lsoa_file': cf.lsoa_file,
+        'N_lsoa_in_aoi': N_lsoa_in_aoi,
+        'cf.products': cf.products,
+        'OUTPUTS':''
+    })
+
+    with open(log_filename,'w') as ff:
+        for item in [it for it in cfdict.items()]:
+            ff.write('{}: {}\n'.format(*item))
+        for item in output_list:
+            ff.write('{}\n'.format(item))
+    print(log_filename)
 
     print('All done')
 
-
+    return
 
 
 
