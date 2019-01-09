@@ -80,6 +80,9 @@ gband = cf.gband
 rband = cf.rband
 nband = cf.nband
 diagnostics = cf.diagnostics
+max_cloud = cf.max_cloud
+cloud_mask_bits = cf.cloud_mask_bits
+qamask_sm_width = cf.qamask_sm_width
 
 def parse_metadata(lines):
     objects = {}
@@ -130,7 +133,7 @@ def get_ceda_password():
     f.close()
     return content
 
-def stack_tir(scene_urls,cloud_mask_bits,aoi,aoi_crs,
+def stack_tir(scene_urls,aoi,aoi_crs,
               subtract_median_lst=True,subtract_air_temp=False):
     """
     Convert clipped and masked TIR scenes to LST, then aggregate 
@@ -243,7 +246,7 @@ def stack_tir(scene_urls,cloud_mask_bits,aoi,aoi_crs,
                         )
         
         # Masks
-        smw = 11
+        smw = qamask_sm_width
         mask_all = filters.maximum_filter(
                             ru.mask_qa(bqa_data,bits=cloud_mask_bits),size=smw
                             )
@@ -389,7 +392,7 @@ def main(*args):
         of each scene
 
     """
-    date_label,place_label,dates_of_interest,pathrows,max_cloud,cloud_mask_bits = args
+    date_label,place_label,dates_of_interest,pathrows = args
     assert type(place_label)==str and len(place_label)>0
     assert type(date_label)==str and len(date_label)>0
     assert len(dates_of_interest)>0
@@ -495,9 +498,12 @@ def main(*args):
     """
     if diagnostics:
         print('Making RGB images')
+        # import pdb; pdb.set_trace()
         for scene_url in scene_urls:
             diag.display_rgb(scene_url,output_plot_dir,
-                        aoi=county_bounds,aoi_crs=county_crs)
+                             cloud_mask_bits,qamask_sm_width,
+                             plot_qamask=True,
+                             aoi=county_bounds,aoi_crs=county_crs)
         output_list += [output_plot_dir+'*RGB.png']
 
     """
@@ -506,8 +512,9 @@ def main(*args):
     if diagnostics:
         print('Making QA/TIR images')
         for scene_url in scene_urls:
-            diag.display_qamask(scene_url,output_plot_dir,cloud_mask_bits,
-                           aoi=county_bounds,aoi_crs=county_crs)
+            diag.display_qamask(scene_url,output_plot_dir,
+                                cloud_mask_bits,qamask_sm_width,
+                                aoi=county_bounds,aoi_crs=county_crs)
         output_list += [output_plot_dir+'*_mask_check.png']
 
     """
@@ -534,7 +541,7 @@ def main(*args):
         print('Producing {}'.format(product_name))
         
         if product_name!='xrLST':
-            lst_stack,profile = stack_tir(scene_urls,cloud_mask_bits,
+            lst_stack,profile = stack_tir(scene_urls,
                                    county_bounds,county_crs,
                                    subtract_median_lst=('r' in product_name),
                                    subtract_air_temp=('x' in product_name)
@@ -716,7 +723,7 @@ def main(*args):
     print(output_filename)
     if len(glob.glob(output_filename))>0:
         os.system('rm -rf '+output_filename)
-        import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
     lsoa_lst_lc_in_aoi.to_file(output_filename,driver='GeoJSON')
     output_list += [output_filename]
 
@@ -737,6 +744,7 @@ def main(*args):
         'N_scenes': N_scenes,
         'N_good_scenes': N_good_scenes,
         'cloud_mask_bits': cloud_mask_bits,
+        'qamask_sm_width': qamask_sm_width,
         'cf.landcover_file': cf.landcover_file,
         'cf.lsoa_file': cf.lsoa_file,
         'N_lsoa_in_aoi': N_lsoa_in_aoi,
@@ -766,9 +774,7 @@ if __name__ == '__main__':
 
     date_label = '2014-2016'
     place_label = 'derbyshire'
-    max_cloud = 70.0
-    cloud_mask_bits = [0,1,4,8,10]
-
+    
     if date_label=='2013-2014':
         dates_of_interest = [['20131101','20140228']]
     elif date_label=='2014-2016':
@@ -785,6 +791,6 @@ if __name__ == '__main__':
     else:
         pathrows =[]
     
-    params = (date_label,place_label,dates_of_interest,pathrows,max_cloud,cloud_mask_bits)
+    params = (date_label,place_label,dates_of_interest,pathrows)
 
     main(*params)

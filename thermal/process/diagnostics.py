@@ -26,7 +26,7 @@ rband = cf.rband
 nband = cf.nband
 diagnostics = cf.diagnostics
 
-def display_qamask(scene_url,output_plot_dir,cloud_mask_bits,**aoi_kwargs):
+def display_qamask(scene_url,output_plot_dir,cloud_mask_bits,qamask_sm_width,**aoi_kwargs):
 
     filename = output_plot_dir + \
                 scene_url.split('/')[-1].replace(
@@ -69,7 +69,7 @@ def display_qamask(scene_url,output_plot_dir,cloud_mask_bits,**aoi_kwargs):
         title='TIR greyscale with masks')
 
     # Make mask arrays
-    smw = 11
+    smw = qamask_sm_width
            
     mask_occ_sm = filters.maximum_filter(ru.mask_qa(bqa_data,bits=[1]),size=smw)
     mask_cloud_sm = filters.maximum_filter(ru.mask_qa(bqa_data,bits=[0,4]),size=smw)
@@ -124,7 +124,8 @@ def display_qamask(scene_url,output_plot_dir,cloud_mask_bits,**aoi_kwargs):
     plt.close(fig)
     return
 
-def display_rgb(scene_url,output_plot_dir,**aoi_kwargs):
+def display_rgb(scene_url,output_plot_dir,cloud_mask_bits,qamask_sm_width,
+                plot_qamask=False,**aoi_kwargs):
     
     filename = output_plot_dir + \
                 scene_url.split('/')[-1].replace(
@@ -168,6 +169,18 @@ def display_rgb(scene_url,output_plot_dir,**aoi_kwargs):
         rescale_kind='clahe',
         use_rst_plot=False
         )
+    ax1=ax1.axes
+
+    # Plot cloud mask outline
+    if plot_qamask:
+        smw = qamask_sm_width
+        # Combined mask of selected bits
+        mask_all = filters.maximum_filter(
+            ru.mask_qa(bqa_data,bits=cloud_mask_bits),
+            size=smw
+            )
+        ax1.contour(mask_all[ymin:ymax,xmin:xmax],levels=[0.5],
+                   colors='yellow',linewidths=0.5,antialiased=True)
 
     fig.savefig(filename)
     plt.close(fig)
