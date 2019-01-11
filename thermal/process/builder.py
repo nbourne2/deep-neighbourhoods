@@ -80,9 +80,6 @@ gband = cf.gband
 rband = cf.rband
 nband = cf.nband
 diagnostics = cf.diagnostics
-max_cloud = cf.max_cloud
-cloud_mask_bits = cf.cloud_mask_bits
-qamask_sm_width = cf.qamask_sm_width
 
 def parse_metadata(lines):
     objects = {}
@@ -246,10 +243,9 @@ def stack_tir(scene_urls,aoi,aoi_crs,
                         )
         
         # Masks
-        smw = qamask_sm_width
-        mask_all = filters.maximum_filter(
-                            ru.mask_qa(bqa_data,bits=cloud_mask_bits),size=smw
-                            )
+        mask_all = ru.smooth_mask_qa(bqa_data,cloud_mask_bits,qamask_sm_width,
+                                     method=qamask_sm_method
+                                     )
 
         lst_data_mask_all = ma.array(lst_data,
                             mask=mask_all,
@@ -392,7 +388,8 @@ def main(*args):
         of each scene
 
     """
-    date_label,place_label,dates_of_interest,pathrows = args
+    (date_label,place_label,dates_of_interest,pathrows,max_cloud,
+              cloud_mask_bits,qamask_sm_width,qamask_sm_method) = args
     assert type(place_label)==str and len(place_label)>0
     assert type(date_label)==str and len(date_label)>0
     assert len(dates_of_interest)>0
@@ -501,7 +498,7 @@ def main(*args):
         # import pdb; pdb.set_trace()
         for scene_url in scene_urls:
             diag.display_rgb(scene_url,output_plot_dir,
-                             cloud_mask_bits,qamask_sm_width,
+                             cloud_mask_bits,qamask_sm_width,qamask_sm_method,
                              plot_qamask=True,
                              aoi=county_bounds,aoi_crs=county_crs)
         output_list += [output_plot_dir+'*RGB.png']
@@ -513,7 +510,7 @@ def main(*args):
         print('Making QA/TIR images')
         for scene_url in scene_urls:
             diag.display_qamask(scene_url,output_plot_dir,
-                                cloud_mask_bits,qamask_sm_width,
+                                cloud_mask_bits,qamask_sm_width,qamask_sm_method,
                                 aoi=county_bounds,aoi_crs=county_crs)
         output_list += [output_plot_dir+'*_mask_check.png']
 
@@ -745,6 +742,7 @@ def main(*args):
         'N_good_scenes': N_good_scenes,
         'cloud_mask_bits': cloud_mask_bits,
         'qamask_sm_width': qamask_sm_width,
+        'qamask_sm_method': qamask_sm_method,
         'cf.landcover_file': cf.landcover_file,
         'cf.lsoa_file': cf.lsoa_file,
         'N_lsoa_in_aoi': N_lsoa_in_aoi,
@@ -774,7 +772,12 @@ if __name__ == '__main__':
 
     date_label = '2014-2016'
     place_label = 'derbyshire'
-    
+    max_cloud = 70.0
+    cloud_mask_bits = [0,1,4,8,10]
+    qamask_sm_width = 11
+    qamask_sm_method = 'convolve' # 'convolve', 'max'
+
+
     if date_label=='2013-2014':
         dates_of_interest = [['20131101','20140228']]
     elif date_label=='2014-2016':
@@ -791,6 +794,8 @@ if __name__ == '__main__':
     else:
         pathrows =[]
     
-    params = (date_label,place_label,dates_of_interest,pathrows)
+    date_label = date_label+'_smqa_noclcon'
+    params = (date_label,place_label,dates_of_interest,pathrows,max_cloud,
+              cloud_mask_bits,qamask_sm_width,qamask_sm_method)
 
     main(*params)

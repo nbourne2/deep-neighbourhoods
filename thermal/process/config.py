@@ -8,10 +8,6 @@ gband = '3'
 rband = '4'
 nband = '5'
 
-max_cloud = 70.0
-cloud_mask_bits = [0,1,4,8,10]
-qamask_sm_width = 11
-
 products_label = 'allLST_clc12'
 
 products = ['rLST']#['xLST','rLST','rxLST','xrLST']

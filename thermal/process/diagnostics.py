@@ -26,7 +26,8 @@ rband = cf.rband
 nband = cf.nband
 diagnostics = cf.diagnostics
 
-def display_qamask(scene_url,output_plot_dir,cloud_mask_bits,qamask_sm_width,**aoi_kwargs):
+def display_qamask(scene_url,output_plot_dir,cloud_mask_bits,qamask_sm_width,
+                    qamask_sm_method,**aoi_kwargs):
 
     filename = output_plot_dir + \
                 scene_url.split('/')[-1].replace(
@@ -70,13 +71,13 @@ def display_qamask(scene_url,output_plot_dir,cloud_mask_bits,qamask_sm_width,**a
 
     # Make mask arrays
     smw = qamask_sm_width
-           
-    mask_occ_sm = filters.maximum_filter(ru.mask_qa(bqa_data,bits=[1]),size=smw)
-    mask_cloud_sm = filters.maximum_filter(ru.mask_qa(bqa_data,bits=[0,4]),size=smw)
-    mask_clcon_sm = filters.maximum_filter(ru.mask_qa(bqa_data,bits=[6]),size=smw)
-    mask_cicon_sm = filters.maximum_filter(ru.mask_qa(bqa_data,bits=[12]),size=smw)
-    mask_cscon_sm = filters.maximum_filter(ru.mask_qa(bqa_data,bits=[8]),size=smw)
-    mask_sncon_sm = filters.maximum_filter(ru.mask_qa(bqa_data,bits=[10]),size=smw)   
+    smm = qamask_sm_method
+    mask_occ_sm = ru.smooth_mask_qa(bqa_data,[1],smw,method=smm)
+    mask_cloud_sm = ru.smooth_mask_qa(bqa_data,[0,4],smw,method=smm)
+    mask_clcon_sm = ru.smooth_mask_qa(bqa_data,[6],smw,method=smm)
+    mask_cicon_sm = ru.smooth_mask_qa(bqa_data,[12],smw,method=smm)
+    mask_cscon_sm = ru.smooth_mask_qa(bqa_data,[8],smw,method=smm)
+    mask_sncon_sm = ru.smooth_mask_qa(bqa_data,[10],smw,method=smm)
 
     # Filled contours for the various "confidence" masks
     ax1.contourf(mask_occ_sm[ymin:ymax,xmin:xmax],levels=[0.5,1],
@@ -95,10 +96,8 @@ def display_qamask(scene_url,output_plot_dir,cloud_mask_bits,qamask_sm_width,**a
                    colors='white',linewidths=0.5,antialiased=True)
 
     # Combined mask of selected bits
-    mask_all = filters.maximum_filter(
-        ru.mask_qa(bqa_data,bits=cloud_mask_bits),
-        size=smw
-        )
+    mask_all = ru.smooth_mask_qa(bqa_data,cloud_mask_bits,qamask_sm_width,
+                                     method=qamask_sm_method)
 
     tir_data_mask_all = ma.array(tir_data,
                                  mask=mask_all,
@@ -125,7 +124,7 @@ def display_qamask(scene_url,output_plot_dir,cloud_mask_bits,qamask_sm_width,**a
     return
 
 def display_rgb(scene_url,output_plot_dir,cloud_mask_bits,qamask_sm_width,
-                plot_qamask=False,**aoi_kwargs):
+                qamask_sm_method,plot_qamask=False,**aoi_kwargs):
     
     filename = output_plot_dir + \
                 scene_url.split('/')[-1].replace(
@@ -173,12 +172,9 @@ def display_rgb(scene_url,output_plot_dir,cloud_mask_bits,qamask_sm_width,
 
     # Plot cloud mask outline
     if plot_qamask:
-        smw = qamask_sm_width
         # Combined mask of selected bits
-        mask_all = filters.maximum_filter(
-            ru.mask_qa(bqa_data,bits=cloud_mask_bits),
-            size=smw
-            )
+        mask_all = ru.smooth_mask_qa(bqa_data,cloud_mask_bits,qamask_sm_width,
+                                     method=qamask_sm_method)
         ax1.contour(mask_all[ymin:ymax,xmin:xmax],levels=[0.5],
                    colors='yellow',linewidths=0.5,antialiased=True)
 

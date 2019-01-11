@@ -5,7 +5,7 @@ import rasterio
 from affine import Affine
 from skimage.exposure import equalize_adapthist
 from shapely.geometry import box
-
+from scipy.ndimage import filters
 
 def read_in_aoi(src,aoi=None,aoi_crs=None):
     """
@@ -77,6 +77,42 @@ def mask_qa(ints, bitmask=0b10011,bits=[]):
         bitmask=np.sum([2**x for x in bits])
     return ((np.ravel(ints) & bitmask)>0).reshape(np.shape(ints))
 
+
+def smooth_mask_qa(bqa_data,mask_bits,sm_width,method='max'):
+    """
+    Return a smoothed version of the mask output by mask_qa
+
+    Inputs:
+    bqa_data = the QA band raster array
+    mask_bits = list of which bits to mask
+    sm_width = width of the smoothing kernel in pixels (N below)
+    method = 'max' or 'convolve':
+        'max' means apply a maximum filter: any value 1 within a region NxN
+            means that whole region is set to 1. In other words, if there
+            is at least one value 1 within a region NxN centred on a pixel
+            then that pixel is set to 1
+        'convolve' means apply a convolution and threshold, so that if there 
+            are at least N pixels within a region NxN centred on a pixel then 
+            that pixel is set to 1
+
+    """
+    if method == 'convolve':
+        threshold = sm_width
+        mask = filters.convolve(
+                    mask_qa(bqa_data.squeeze(),bits=mask_bits).astype(np.int),
+                    np.ones((sm_width,sm_width)),
+                    mode='constant'
+                    )
+        mask = (mask>threshold).astype(np.int)
+
+    elif method == 'max':
+        mask = filters.maximum_filter(
+                    mask_qa(bqa_data,bits=mask_bits),size=sm_width
+                    )
+    else:
+        mask = bqa_data
+
+    return mask
 
 """functions to rescale data in images e.g. linear or hist equalise"""
 
