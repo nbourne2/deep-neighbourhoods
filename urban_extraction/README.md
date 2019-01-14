@@ -6,14 +6,14 @@ The code for performing urban extraction is located into the `classification_mod
 
 - `classifier:` It contains the SVM classifier for performing the urban extraction (additional classifiers can be added into this folder).
 
-NOTE:  An issue of using snappy is the performance. Unfortunately, the performance of snappy compared to SNAP desktop 
-       is considerably slower. SNAP has been set up to execute tasks using parallel processing unlike snappy.
+NOTE:  
 
-       reference: https://forum.step.esa.int/t/performance-of-snap-desktop-and-snappy/1850/9
+	An issue of using snappy is the performance. Unfortunately, the performance of snappy compared to SNAP desktop 
+    is considerably slower. SNAP has been set up to execute tasks using parallel processing unlike snappy.
+    reference: https://forum.step.esa.int/t/performance-of-snap-desktop-and-snappy/1850/9
 
-       As an alternative, the bash script `texture.sh` can be used. This script uses the Graphicl Processing Tool (GPT)
-       which is a commnad line tool to access SNAP all funtionalities. It uses multithreding and the performance is the
-       same with SNAP desktop 
+    As an alternative, the bash script `texture.sh` can be used. This script uses the Graphicl Processing Tool (GPT)
+    which is a commnad line tool to access SNAP all funtionalities. It uses multithreding and the performance is the same with SNAP desktop 
 
 - `features:` It contains features that can be used as additional layers to improve the accuracy of urban extraction. At the moment, only texture analysis (GLCM) is implemeted.
 
