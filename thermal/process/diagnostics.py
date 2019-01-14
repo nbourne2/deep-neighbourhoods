@@ -26,7 +26,8 @@ rband = cf.rband
 nband = cf.nband
 diagnostics = cf.diagnostics
 
-def display_qamask(scene_url,output_plot_dir,cloud_mask_bits,qamask_sm_width,
+def display_qamask(scene_url,output_plot_dir,cloud_mask_bits,
+                    cloud_mask_paired_bits,qamask_sm_width,
                     qamask_sm_method,**aoi_kwargs):
 
     filename = output_plot_dir + \
@@ -96,8 +97,10 @@ def display_qamask(scene_url,output_plot_dir,cloud_mask_bits,qamask_sm_width,
                    colors='white',linewidths=0.5,antialiased=True)
 
     # Combined mask of selected bits
-    mask_all = ru.smooth_mask_qa(bqa_data,cloud_mask_bits,qamask_sm_width,
-                                     method=qamask_sm_method)
+    mask_all = ru.smooth_mask_qa(bqa_data,cloud_mask_bits,
+                                     qamask_sm_width,
+                                     method=qamask_sm_method,
+                                     bit_pairs=cloud_mask_paired_bits)
 
     tir_data_mask_all = ma.array(tir_data,
                                  mask=mask_all,
@@ -123,7 +126,8 @@ def display_qamask(scene_url,output_plot_dir,cloud_mask_bits,qamask_sm_width,
     plt.close(fig)
     return
 
-def display_rgb(scene_url,output_plot_dir,cloud_mask_bits,qamask_sm_width,
+def display_rgb(scene_url,output_plot_dir,cloud_mask_bits,
+                cloud_mask_paired_bits,qamask_sm_width,
                 qamask_sm_method,plot_qamask=False,**aoi_kwargs):
     
     filename = output_plot_dir + \
@@ -173,8 +177,10 @@ def display_rgb(scene_url,output_plot_dir,cloud_mask_bits,qamask_sm_width,
     # Plot cloud mask outline
     if plot_qamask:
         # Combined mask of selected bits
-        mask_all = ru.smooth_mask_qa(bqa_data,cloud_mask_bits,qamask_sm_width,
-                                     method=qamask_sm_method)
+        mask_all = ru.smooth_mask_qa(bqa_data,cloud_mask_bits,
+                                     qamask_sm_width,
+                                     method=qamask_sm_method,
+                                     bit_pairs=cloud_mask_paired_bits)
         ax1.contour(mask_all[ymin:ymax,xmin:xmax],levels=[0.5],
                    colors='yellow',linewidths=0.5,antialiased=True)
 

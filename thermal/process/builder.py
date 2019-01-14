@@ -389,7 +389,8 @@ def main(*args):
 
     """
     (date_label,place_label,dates_of_interest,pathrows,max_cloud,
-              cloud_mask_bits,qamask_sm_width,qamask_sm_method) = args
+              cloud_mask_bits,cloud_mask_paired_bits,
+              qamask_sm_width,qamask_sm_method) = args
     assert type(place_label)==str and len(place_label)>0
     assert type(date_label)==str and len(date_label)>0
     assert len(dates_of_interest)>0
@@ -498,7 +499,8 @@ def main(*args):
         # import pdb; pdb.set_trace()
         for scene_url in scene_urls:
             diag.display_rgb(scene_url,output_plot_dir,
-                             cloud_mask_bits,qamask_sm_width,qamask_sm_method,
+                             cloud_mask_bits,cloud_mask_paired_bits,
+                             qamask_sm_width,qamask_sm_method,
                              plot_qamask=True,
                              aoi=county_bounds,aoi_crs=county_crs)
         output_list += [output_plot_dir+'*RGB.png']
@@ -510,7 +512,8 @@ def main(*args):
         print('Making QA/TIR images')
         for scene_url in scene_urls:
             diag.display_qamask(scene_url,output_plot_dir,
-                                cloud_mask_bits,qamask_sm_width,qamask_sm_method,
+                                cloud_mask_bits,cloud_mask_paired_bits,
+                                qamask_sm_width,qamask_sm_method,
                                 aoi=county_bounds,aoi_crs=county_crs)
         output_list += [output_plot_dir+'*_mask_check.png']
 
@@ -741,6 +744,7 @@ def main(*args):
         'N_scenes': N_scenes,
         'N_good_scenes': N_good_scenes,
         'cloud_mask_bits': cloud_mask_bits,
+        'cloud_mask_paired_bits': cloud_mask_paired_bits,
         'qamask_sm_width': qamask_sm_width,
         'qamask_sm_method': qamask_sm_method,
         'cf.landcover_file': cf.landcover_file,
@@ -773,7 +777,8 @@ if __name__ == '__main__':
     date_label = '2014-2016'
     place_label = 'derbyshire'
     max_cloud = 70.0
-    cloud_mask_bits = [0,1,4,8,10]
+    cloud_mask_bits = [0,1,4,8]
+    cloud_mask_paired_bits = [[5,6],[9,10],[11,12]]
     qamask_sm_width = 11
     qamask_sm_method = 'convolve' # 'convolve', 'max'
 
@@ -794,8 +799,9 @@ if __name__ == '__main__':
     else:
         pathrows =[]
     
-    date_label = date_label+'_smqa_noclcon'
+    date_label = date_label #+'_smqa_hisnclcon'
     params = (date_label,place_label,dates_of_interest,pathrows,max_cloud,
-              cloud_mask_bits,qamask_sm_width,qamask_sm_method)
+              cloud_mask_bits,cloud_mask_paired_bits,
+              qamask_sm_width,qamask_sm_method)
 
     main(*params)
