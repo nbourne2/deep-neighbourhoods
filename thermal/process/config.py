@@ -10,9 +10,10 @@ nband = '5'
 
 products_label = 'allLST_clc12'
 
-products = ['rLST']#['xLST','rLST','rxLST','xrLST']
+products = ['rLST','rxLST','xrLST']
 
-landcover_file = rootdir+'copernicus/land_cover/g100_clc12_V18_5.tif'
+# landcover_file = rootdir+'copernicus/land_cover/g100_clc12_V18_5.tif'
+landcover_file = rootdir+'copernicus/urban_atlas/Five_Counties_UA_Corine.tif'
 lsoa_file = rootdir+'uk_data/astrosat_data/lsoa_with_gas_and_electricity.geojson'
 uk_counties_shapefile = rootdir+'uk_data/counties_and_ua_boundaries/'\
     +'Counties_and_Unitary_Authorities_December_2015_Generalised_Clipped_'\
