@@ -65,9 +65,11 @@ from scipy.ndimage import convolve, filters
 import landsat
 import land_surface_temperature as lst
 import met_climate
+import corine
 from common import raster_utils as ru
 from common import geoplot as gpl
- 
+import diagnostics as diag
+
 # GLOBALS defined here
 import config as cf  
 rootdir = cf.rootdir
@@ -77,6 +79,7 @@ bband = cf.bband
 gband = cf.gband
 rband = cf.rband
 nband = cf.nband
+diagnostics = cf.diagnostics
 
 def parse_metadata(lines):
     objects = {}
@@ -121,161 +124,13 @@ def get_metadata(scene_urls):
 
     return meta_list
 
-
-def display_qamask(scene_url,output_plot_dir,cloud_mask_bits,**aoi_kwargs):
-
-    filename = output_plot_dir + \
-                scene_url.split('/')[-1].replace(
-                    '.TIF','_mask_check.png'
-                    )
-    
-    legend = ('Legend:' ,
-              'Magenta = terrain occlusion',
-              'white = cloud bit',
-              'Red = cloud conf med/high',
-              'Cyan = cirrus conf med/high',
-              'Blue = cloud shadow conf med/high',
-              'Green = snow/ice conf med/high'
-              )
-
-    scene_tir = scene_url
-    scene_bqa = scene_url.replace('B'+tirband,'B'+qaband)
-
-    with rasterio.open(scene_bqa) as bqa:
-        with rasterio.open(scene_tir) as tir:
-
-            bqa_data,bqa_trans = ru.read_in_aoi(bqa,**aoi_kwargs)
-            tir_data,tir_trans = ru.read_in_aoi(tir,**aoi_kwargs)
-            
-    bqa_data = bqa_data[0,:,:]
-    tir_data = tir_data[0,:,:]
-    tir_data = ma.array(tir_data,dtype=float,
-                        mask=ru.mask_qa(bqa_data,bitmask=0b1))
-
-    (ymin,ymax) = (0, tir_data.shape[0])
-    (xmin,xmax) = (0, tir_data.shape[1])
-    
-    # Plot unmasked data
-    fig,axes = gpl.make_figure(shape=2,figsize=(40,20))
-    ax1,norm1 = gpl.raster(
-        axes[0],
-        tir_data[ymin:ymax,xmin:xmax],
-        rescale_kind='hist_eq',
-        colormap='Greys_r',
-        title='TIR greyscale with masks')
-
-    # Make mask arrays
-    smw = 11
-           
-    mask_occ_sm = filters.maximum_filter(ru.mask_qa(bqa_data,bits=[1]),size=smw)
-    mask_cloud_sm = filters.maximum_filter(ru.mask_qa(bqa_data,bits=[0,4]),size=smw)
-    mask_clcon_sm = filters.maximum_filter(ru.mask_qa(bqa_data,bits=[6]),size=smw)
-    mask_cicon_sm = filters.maximum_filter(ru.mask_qa(bqa_data,bits=[12]),size=smw)
-    mask_cscon_sm = filters.maximum_filter(ru.mask_qa(bqa_data,bits=[8]),size=smw)
-    mask_sncon_sm = filters.maximum_filter(ru.mask_qa(bqa_data,bits=[10]),size=smw)   
-
-    # Filled contours for the various "confidence" masks
-    ax1.contourf(mask_occ_sm[ymin:ymax,xmin:xmax],levels=[0.5,1],
-                   colors='magenta',antialiased=True)
-    ax1.contourf(mask_sncon_sm[ymin:ymax,xmin:xmax],[0.5,1],
-                   colors='green',antialiased=True)
-    ax1.contourf(mask_cscon_sm[ymin:ymax,xmin:xmax],[0.5,1],
-                   colors='blue',antialiased=True)
-    ax1.contourf(mask_clcon_sm[ymin:ymax,xmin:xmax],[0.5,1],
-                   colors='red',antialiased=True)
-    ax1.contourf(mask_cicon_sm[ymin:ymax,xmin:xmax],[0.5,1],
-                   colors='cyan',antialiased=True)
-    
-    # Unfilled contour for the simple cloud bit
-    ax1.contour(mask_cloud_sm[ymin:ymax,xmin:xmax],levels=[0.5],
-                   colors='white',linewidths=0.5,antialiased=True)
-
-    # Combined mask of selected bits
-    mask_all = filters.maximum_filter(
-        ru.mask_qa(bqa_data,bits=cloud_mask_bits),
-        size=smw
-        )
-
-    tir_data_mask_all = ma.array(tir_data,
-                                 mask=mask_all,
-                                 fill_value=0
-                                 ).filled()
-
-    # Plot masked data
-    ax2,norm2 = gpl.raster(
-        axes[1],
-        tir_data_mask_all[ymin:ymax,xmin:xmax],
-        rescale_kind='hist_eq',
-        colormap='hot',
-        title='Masked TIR',
-        titlesize='xx-large')
-    
-    # Add some text and save
-    ax1.text(1,1,'\n'.join(legend),
-             transform=ax1.transAxes,
-             clip_on=False)
-    fig.suptitle('{} smw={}'.format(scene_url.split('/')[-1], smw),
-                 fontsize='xx-large')
-    fig.savefig(filename)
-
-    return
-
-def display_rgb(scene_url,output_plot_dir,**aoi_kwargs):
-    
-    filename = output_plot_dir + \
-                scene_url.split('/')[-1].replace(
-                    f'B{tirband}.TIF','RGB.png'
-                    )
-    scene_b = scene_url.replace('B'+tirband,'B'+bband)
-    scene_g = scene_url.replace('B'+tirband,'B'+gband)
-    scene_r = scene_url.replace('B'+tirband,'B'+rband)
-    scene_bqa = scene_url.replace('B'+tirband,'B'+qaband)
-
-    with rasterio.open(scene_b) as src:
-        blue_data,blue_trans = ru.read_in_aoi(src,**aoi_kwargs)
-    with rasterio.open(scene_g) as src:
-        green_data,green_trans = ru.read_in_aoi(src,**aoi_kwargs)
-    with rasterio.open(scene_r) as src:
-        red_data,red_trans = ru.read_in_aoi(src,**aoi_kwargs)
-    with rasterio.open(scene_bqa) as src:
-        bqa_data,bqa_trans = ru.read_in_aoi(src,**aoi_kwargs)
-    
-    bqa_data = bqa_data.squeeze()
-    for arr in (blue_data,green_data,red_data):
-        arr = ma.array(arr,dtype=float,
-                       mask=ru.mask_qa(bqa_data,bits=[0]),
-                       fill_value=0.
-                       ).filled()   
-    blue_data = blue_data.squeeze()
-    green_data = green_data.squeeze()
-    red_data = red_data.squeeze()
-    
-    rgb_data = np.array(np.dstack([red_data,green_data,blue_data]),dtype=float)
-    
-    (ymin,ymax) = (0, rgb_data.shape[0])
-    (xmin,xmax) = (0, rgb_data.shape[1])
-                        
-    # Plot RGB data
-    fig,ax1 = gpl.make_figure(figsize=(20,20))
-    
-    ax1,norm1 = gpl.raster(
-        ax1,
-        rgb_data[ymin:ymax,xmin:xmax,:],
-        rescale_kind='clahe',
-        use_rst_plot=False
-        )
-
-    fig.savefig(filename)
-
-    return
-
 def get_ceda_password():
-    f = open(rootdir+'uk_data/ceda_password.txt')
+    f = open(cf.ceda_password_file)
     content = f.readline().strip()
     f.close()
     return content
 
-def stack_tir(scene_urls,cloud_mask_bits,aoi,aoi_crs,
+def stack_tir(scene_urls,aoi,aoi_crs,
               subtract_median_lst=True,subtract_air_temp=False):
     """
     Convert clipped and masked TIR scenes to LST, then aggregate 
@@ -388,10 +243,9 @@ def stack_tir(scene_urls,cloud_mask_bits,aoi,aoi_crs,
                         )
         
         # Masks
-        smw = 11
-        mask_all = filters.maximum_filter(
-                            ru.mask_qa(bqa_data,bits=cloud_mask_bits),size=smw
-                            )
+        mask_all = ru.smooth_mask_qa(bqa_data,cloud_mask_bits,qamask_sm_width,
+                                     method=qamask_sm_method
+                                     )
 
         lst_data_mask_all = ma.array(lst_data,
                             mask=mask_all,
@@ -518,7 +372,7 @@ def subtract_mean_at(meanlstfile,dates_of_interest):
                           fill_value=np.nan).filled()
     return xrlst_mean, profile
 
-def main(*args,diagnostics=False):
+def main(*args):
     """Main function
     
     Input:
@@ -534,7 +388,9 @@ def main(*args,diagnostics=False):
         of each scene
 
     """
-    date_label,place_label,dates_of_interest,pathrows,max_cloud,cloud_mask_bits = args
+    (date_label,place_label,dates_of_interest,pathrows,max_cloud,
+              cloud_mask_bits,cloud_mask_paired_bits,
+              qamask_sm_width,qamask_sm_method) = args
     assert type(place_label)==str and len(place_label)>0
     assert type(date_label)==str and len(date_label)>0
     assert len(dates_of_interest)>0
@@ -548,12 +404,12 @@ def main(*args,diagnostics=False):
         print('Warning: output directory exists and will be overwritten: ' 
                 +'{}'.format(output_plot_dir))
 
-
+    output_list = []
     """
     Define the AoI based on County data
     """
     county_string = place_label+'*'
-    counties = gpd.read_file(cf.uk_counties_shapefile) 
+    counties = gpd.read_file(cf.uk_counties_shapefile)
     county_ind = np.where(counties['ctyua15nm'].str.match(
         county_string,case=False,na=False))[:][0]
     print('County in shapefile: ',county_ind,
@@ -591,8 +447,9 @@ def main(*args,diagnostics=False):
     sort = np.argsort(scene_dates)
     scene_urls = np.array([scenebucket.https_stub + s for s in np.array(scenes)[sort]])
     scene_dates = np.array(scene_dates)[sort]
-
-    print('Total {} scenes found'.format(len(scene_urls)))
+    
+    N_scenes = len(scene_urls)
+    print('Total {} scenes found'.format(N_scenes))
 
     meta_urls = np.array([s.replace('B10.TIF','MTL.txt') for s in scene_urls])
 
@@ -625,22 +482,28 @@ def main(*args,diagnostics=False):
     meta_list = meta_list[good_cloud]
     scenes_table = scenes_table.iloc[good_cloud]
     
+    N_good_scenes = len(scene_urls)
     print('Found {} scenes with land cloud cover <= {}%'.format(
-            len(scene_urls),max_cloud))
+            N_good_scenes,max_cloud))
 
     """
     Output table of what we're going to use
     """
     scenes_table.to_csv(output_plot_dir+'scenes_list.dat',sep=' ')
-
+    output_list += [output_plot_dir+'scenes_list.dat']
     """
     Make RGB images
     """
     if diagnostics:
         print('Making RGB images')
+        # import pdb; pdb.set_trace()
         for scene_url in scene_urls:
-            display_rgb(scene_url,output_plot_dir,
-                        aoi=county_bounds,aoi_crs=county_crs)
+            diag.display_rgb(scene_url,output_plot_dir,
+                             cloud_mask_bits,cloud_mask_paired_bits,
+                             qamask_sm_width,qamask_sm_method,
+                             plot_qamask=True,
+                             aoi=county_bounds,aoi_crs=county_crs)
+        output_list += [output_plot_dir+'*RGB.png']
 
     """
     Make QA images
@@ -648,34 +511,37 @@ def main(*args,diagnostics=False):
     if diagnostics:
         print('Making QA/TIR images')
         for scene_url in scene_urls:
-            display_qamask(scene_url,output_plot_dir,
-                           aoi=county_bounds,aoi_crs=county_crs)
+            diag.display_qamask(scene_url,output_plot_dir,
+                                cloud_mask_bits,cloud_mask_paired_bits,
+                                qamask_sm_width,qamask_sm_method,
+                                aoi=county_bounds,aoi_crs=county_crs)
+        output_list += [output_plot_dir+'*_mask_check.png']
 
     """
     QA-mask and Aggregate time-series of LST
     """
 
-    #counties = counties.to_crs(scene.crs)
     print('Stacking TIR data...')
     
     # check that 'rLST' is produced before 'xrLST'
     products = cf.products
-    if ('xrLST' in products) and not ('rLST' in products):
-        products = ['rLST'] + products
-    elif (np.flatnonzero('xrLST' == np.array(products))[0]
-          < np.flatnonzero('rLST' == np.array(products))[0]):
-        products = (['rLST'] 
-            + list(np.array(products)[
-                np.flatnonzero('rLST' != np.array(products))]
+    if ('xrLST' in products):
+        if not ('rLST' in products):
+            products = ['rLST'] + products
+        elif (np.flatnonzero('xrLST' == np.array(products))[0]
+              < np.flatnonzero('rLST' == np.array(products))[0]):
+            products = (['rLST'] 
+                + list(np.array(products)[
+                    np.flatnonzero('rLST' != np.array(products))]
+                )
             )
-        )
 
     for product_name in products:
 
         print('Producing {}'.format(product_name))
         
         if product_name!='xrLST':
-            lst_stack,profile = stack_tir(scene_urls,cloud_mask_bits,
+            lst_stack,profile = stack_tir(scene_urls,
                                    county_bounds,county_crs,
                                    subtract_median_lst=('r' in product_name),
                                    subtract_air_temp=('x' in product_name)
@@ -707,6 +573,7 @@ def main(*args,diagnostics=False):
                 with rasterio.open(filename, 'w', **profile) as dst:
                     dst.write(lst_stack)
                     print(filename)
+                    output_list += [filename]
                 
             profile.update(count=1)
             
@@ -714,17 +581,189 @@ def main(*args,diagnostics=False):
             with rasterio.open(filename, 'w', **profile) as dst:
                 dst.write(lst_mean.reshape([1,lst_stack.shape[1],lst_stack.shape[2]]))
                 print(filename)
+                output_list += [filename]
                 
             if product_name!='xrLST':
                 filename = output_plot_dir+'{}_var_n.tif'.format(product_name)
                 with rasterio.open(filename, 'w', **profile) as dst:
                     dst.write((lst_var/lst_count).reshape([1,lst_stack.shape[1],lst_stack.shape[2]]))
                     print(filename)
+                    output_list += [filename]
         
+    if diagnostics:
+        print('Making LST comparison images')
+        output_filename = output_plot_dir+'_'.join(products)+'_comp.png'
+        diag.display_lst_comparison(products,output_plot_dir,output_filename)
+        output_list += [output_filename]
+
+    print('Moving on to vectorization')
+    
+    """
+    Open Land-use/land-cover dataset and create mask
+    """
+    print('Mask with Land-Use raster')
+
+    lulc_clip_file = output_plot_dir+'clc_{}.tif'.format(place_label)
+    scene_file = output_plot_dir+'{}_mean.tif'.format(products[0])
+    corine.reproject_raster(cf.landcover_file,scene_file,lulc_clip_file)
+    print(lulc_clip_file)
+    output_list += [lulc_clip_file]
+
+    landcover_data,landcover_mask1,landcover_mask2 = corine.mask_raster(
+        lulc_clip_file,output_plot_dir)
+
+    if diagnostics:
+        print('Making LULC mask comparison images')
+        # import pdb; pdb.set_trace()
+        diag.display_lulc(landcover_data.astype(np.float),landcover_mask1,landcover_mask2,output_plot_dir)
+        output_list += [output_plot_dir+'Land_Cover_C6.pdf',output_plot_dir+'Land_Cover_C30.pdf']
+
+
+    """
+    Read LSOA database and convert to Landsat CRS then extract features in AOI
+    """
+    print('Read LSOAs')
+    lsoa = gpd.read_file(cf.lsoa_file) 
+    
+    with rasterio.open(scene_file) as scene:
+        lsoa = lsoa.to_crs(scene.crs) 
+        transform_aoi = ru.rst_transform(scene)
+        aoi_bounds = scene.bounds
+        aoi_left, aoi_bottom, aoi_right, aoi_top = aoi_bounds
+
+    lsoa_in_aoi = lsoa.cx[aoi_left:aoi_right,aoi_bottom:aoi_top]
+    N_lsoa_in_aoi = len(lsoa_in_aoi)
+
+    """
+    Aggregate all of the the rLST,xLST,rxLST,xrLST maps, masking for land use
+    """
+    print('Aggregate LST data in LSOAs')
+    lsoa_lst_in_aoi = lsoa_in_aoi.copy()
+
+    for product_name in products:
+        filename = output_plot_dir+'{}_mean.tif'.format(product_name)
+        
+        with rasterio.open(filename) as thislstmap:
+            this_lst_mean = thislstmap.read()[0,:,:]
+            this_lst_mean_masked_lc1 = ma.array(
+                this_lst_mean, 
+                mask=((landcover_mask1) | (this_lst_mean==0)),
+                fill_value=np.nan
+            ).filled()
+        
+        if diagnostics:
+            # import pdb; pdb.set_trace()
+            diag.display_agg_lst(lsoa_in_aoi,transform_aoi,aoi_bounds,this_lst_mean,
+                            landcover_mask1,
+                            landcover_mask2,
+                            output_plot_dir+'{}_LSOA_agg_panels2.pdf'.format(product_name)
+                            )
+
+        zs = zonal_stats(lsoa_in_aoi, this_lst_mean_masked_lc1, 
+                         affine=transform_aoi, stats=['mean','count'])
+        
+        zsmean = ma.array([z['mean'] for z in zs],
+                          mask=[z['count']<=0 for z in zs],
+                          fill_value=np.nan)
+        
+        # Add LST_mean column to gdf vector        
+        newcolname = product_name+'_mean'
+        lsoa_lst_in_aoi.loc[:,newcolname] = \
+            pd.Series(zsmean.filled(), index=lsoa_lst_in_aoi.index)
+        print(newcolname)
+
+    print('Columns added to LSOA vector database')
+    
+    if diagnostics:
+        print('Made LULC mask comparison images')
+        output_list += [output_plot_dir+'*_LSOA_agg_panels.pdf']
+        output_list += [output_plot_dir+'*_LSOA_agg_panels2.pdf']
+    
+
+    print('Defining Urban/Rural classifications')        
+    """Classify LSOA cells as urban/rural based on landcover map"""
+
+    lcs = zonal_stats(lsoa_in_aoi, landcover_data, affine=transform_aoi, 
+                      stats=['median','count'])
+    lcmean = ma.array([z['median'] for z in lcs],
+                      mask=[z['count']<=0 for z in lcs],
+                      fill_value=np.nan)
+        
+    # Add LC_mean column to gdf vector
+    lsoa_lst_lc_in_aoi = lsoa_lst_in_aoi.assign(
+        LC_median = lcmean.filled(),
+        LC_urban = np.where(lcmean.filled()<=11,1,0))
+
+    if diagnostics:
+        # mask for plot:
+        lsoa_new = lsoa_lst_lc_in_aoi.iloc[np.where(lcmean.mask==False)]    
+        # import pdb; pdb.set_trace()
+        diag.display_urban_rural(lsoa_new,aoi_bounds,output_plot_dir+'Urban_Rural.pdf')
+        output_list += [output_plot_dir+'Urban_Rural.pdf']
+
+    print('Defining geographical stats to add to database')
+    """Compute some geographical properties of the LSOAs to include in the output vector"""
+
+    zslc = zonal_stats(lsoa_in_aoi, ~landcover_mask1, affine=transform_aoi, stats=['sum','count'])
+
+    lc_unmasked_frac = np.zeros(N_lsoa_in_aoi)
+
+    for ii in range(N_lsoa_in_aoi):
+        if zslc[ii]['sum'] is not None:
+            lc_unmasked_frac[ii] = float(zslc[ii]['sum'])/float(zslc[ii]['count'])
+
+    lsoa_lst_lc_in_aoi = lsoa_lst_lc_in_aoi.assign(
+        area_sqm = lsoa_lst_lc_in_aoi.area,
+        area_lc_unmasked = lsoa_lst_lc_in_aoi.area * lc_unmasked_frac
+        )
+    
+    print('Final vector file output')
+    output_filename = output_plot_dir+'lsoa_{}_{}.geojson'.format(
+        place_label,cf.products_label)
+    print(output_filename)
+    if len(glob.glob(output_filename))>0:
+        os.system('rm -rf '+output_filename)
+        # import pdb; pdb.set_trace()
+    lsoa_lst_lc_in_aoi.to_file(output_filename,driver='GeoJSON')
+    output_list += [output_filename]
+
+    print('Output log of config')
+    log_filename = output_plot_dir+'lsoa_{}_{}.log'.format(
+        place_label,cf.products_label)
+    cfdict = OrderedDict({
+        'INPUTS': '',
+        'dates_of_interest': dates_of_interest,
+        'pathrows': pathrows,
+        'cf.uk_counties_shapefile': cf.uk_counties_shapefile,
+        'county_ind': county_ind,
+        'ctyua15nm': counties.iloc[county_ind]['ctyua15nm'].values,
+        'county_bounds': county_bounds,
+        'county_crs': county_crs,
+        'cf.tirband':cf.tirband,
+        'max_cloud': max_cloud,
+        'N_scenes': N_scenes,
+        'N_good_scenes': N_good_scenes,
+        'cloud_mask_bits': cloud_mask_bits,
+        'cloud_mask_paired_bits': cloud_mask_paired_bits,
+        'qamask_sm_width': qamask_sm_width,
+        'qamask_sm_method': qamask_sm_method,
+        'cf.landcover_file': cf.landcover_file,
+        'cf.lsoa_file': cf.lsoa_file,
+        'N_lsoa_in_aoi': N_lsoa_in_aoi,
+        'cf.products': cf.products,
+        'OUTPUTS':''
+    })
+
+    with open(log_filename,'w') as ff:
+        for item in [it for it in cfdict.items()]:
+            ff.write('{}: {}\n'.format(*item))
+        for item in output_list:
+            ff.write('{}\n'.format(item))
+    print(log_filename)
 
     print('All done')
 
-
+    return
 
 
 
@@ -735,10 +774,14 @@ if __name__ == '__main__':
 
     """
 
-    date_label = '2014-2016'
-    place_label = 'derbyshire'
+    date_label = '2015-2019'
+    place_label = 'shropshire'
     max_cloud = 70.0
-    cloud_mask_bits = [0,1,4,8,10]
+    cloud_mask_bits = [0,1,4,8]
+    cloud_mask_paired_bits = [[5,6],[9,10],[11,12]]
+    qamask_sm_width = 11
+    qamask_sm_method = 'convolve' # 'convolve', 'max'
+
 
     if date_label=='2013-2014':
         dates_of_interest = [['20131101','20140228']]
@@ -748,14 +791,27 @@ if __name__ == '__main__':
         dates_of_interest = [['20161101','20170228'],['20171101','20180228']]
     elif date_label=='2017-2018':
         dates_of_interest = [['20171101','20180228']]
+    elif date_label=='2015-2019':
+        dates_of_interest = [['20151101','20160228'],['20161101','20170228'],
+                             ['20171101','20180228'],['20181101','20190228']]
     else:
         date_label=''
 
-    if place_label == 'derbyshire':
-        pathrows = [['202','023'],['203','023']]
-    else:
-        pathrows =[]
-    
-    params = (date_label,place_label,dates_of_interest,pathrows,max_cloud,cloud_mask_bits)
+    # if place_label == 'derbyshire':
+    #     pathrows = [['202','023'],['203','023']]
+    # else:
+    #     pathrows =[]
+    # Lookup pathrow
+    clookup = pd.read_csv(cf.pathrow_lookup,delim_whitespace=True,header=0)
+    pr_ind = np.where(clookup['county'].str.match(
+        place_label,case=False,na=False))[:][0]
+    pr_str = clookup['pathrows'][pr_ind[0]]
+    pathrows = [['{:03}'.format(int(rr)) for rr in pr.split(',')] 
+                for pr in pr_str.split(';')]
+
+    date_label = date_label #+'_smqa_hisnclcon'
+    params = (date_label,place_label,dates_of_interest,pathrows,max_cloud,
+              cloud_mask_bits,cloud_mask_paired_bits,
+              qamask_sm_width,qamask_sm_method)
 
     main(*params)

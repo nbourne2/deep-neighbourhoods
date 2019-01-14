@@ -76,7 +76,8 @@ class access_ukcp09():
             self.session = setup_session(testurl,username,password)
         except Exception as e:
             print('Error: {}'.format(e))
-            return
+            import pdb;pdb.set_trace()
+            # return
 
         self.data = None
         self.xcol = 'lon'
@@ -108,9 +109,10 @@ class access_ukcp09():
         # Open the OpenDAP server and define the column of interest
         try:
             self.data = open_url(dataset_url, session=self.session)
-        except:
+        except Exception as e:
             print('Error accessing data: {}'.format(dataset_url))
-            raise
+            print('Error: {}'.format(e))
+            import pdb;pdb.set_trace()
 
         # Download the actual data
         self.tcol = 'daily_meantemp'
@@ -148,9 +150,10 @@ class access_ukcp09():
         # Open the OpenDAP server
         try:
             self.data = open_url(dataset_url, session=self.session)
-        except:
+        except Exception as e:
             print('Error accessing data: {}'.format(dataset_url))
-            return
+            print('Error: {}'.format(e))
+            import pdb;pdb.set_trace()
 
         # Download the actual data
         self.tcol = 'monthly_meantemp'

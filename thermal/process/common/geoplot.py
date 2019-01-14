@@ -93,7 +93,8 @@ def choropleth(axes, gdf,
         facecolor='None',
         edgecolor='k',
         linewidth=0.5,
-        titlesize=15
+        titlesize=15,
+        **plot_kwargs
     ):
     """
     Display choropleth of vector data
@@ -132,7 +133,7 @@ def choropleth(axes, gdf,
 
     if no_choropleth:
         base = gdf.plot(ax=axes, color=facecolor, edgecolor=edgecolor,
-                        linewidth=linewidth)
+                        linewidth=linewidth, **plot_kwargs)
     else:
 
         # 1. clean input (NaN, None, numpy.mask)
@@ -151,7 +152,8 @@ def choropleth(axes, gdf,
             base = gdf.plot(column=colname, ax=axes, 
                                         cmap=colormap,
                                         vmin=vmin,vmax=vmax,
-                                        edgecolor='k',linewidth=0.2)
+                                        edgecolor='k',linewidth=0.2,
+                                        **plot_kwargs)
 
 
     # 5. set ticks, labels and title
@@ -223,6 +225,7 @@ def raster(axes, im,
            no_axes_ticks=True,
            use_rst_plot=True,
            titlesize=15,
+           clean_data=True,
            **clahe_equalize_kwargs
     ):
     """
@@ -264,10 +267,11 @@ def raster(axes, im,
 
     # 1. clean input (NaN, None, numpy.mask)
     data = np.squeeze(im).copy()
-    Nans = np.array(~np.isfinite(data))
-    Nones = np.array(data is None)
-    datamask = (Nans | Nones)
-    data = ma.array(data,mask=datamask,fill_value=np.nan).filled()
+    if clean_data:
+        Nans = np.array(~np.isfinite(data))
+        Nones = np.array(data is None)
+        datamask = (Nans | Nones)
+        data = ma.array(data,mask=datamask,fill_value=np.nan).filled()
 
     # 2. determine vmin/vmax, eg from input or percentiles
     if vmin is None:
@@ -275,8 +279,9 @@ def raster(axes, im,
     if vmax is None:
         vmax = np.nanpercentile(data,pmax)
 
-    data = np.where(data>=vmin,data,vmin)
-    data = np.where(data<=vmax,data,vmax)
+    if clean_data:
+        data = np.where(data>=vmin,data,vmin)
+        data = np.where(data<=vmax,data,vmax)
 
     # 3. normalise data
     # There are three options:
@@ -325,7 +330,8 @@ def colorbar(axes,Norm,
         isdate=False,
         label='',
         ticks=4,
-        locbottom=False
+        locbottom=False,
+        cbpos=None
     ):
     """
     Make a colorbar for a previously plotted image/choropleth
@@ -355,10 +361,11 @@ def colorbar(axes,Norm,
     else:
         Aaxes=axes
 
-    if locbottom:
-        cbpos = [Aaxes.get_position().xmin,0.01,Aaxes.get_position().width,0.02]
-    else:
-        cbpos = [Aaxes.get_position().xmin,0.97,Aaxes.get_position().width,0.02]
+    if cbpos is None:
+        if locbottom:
+            cbpos = [Aaxes.get_position().xmin,0.01,Aaxes.get_position().width,0.02]
+        else:
+            cbpos = [Aaxes.get_position().xmin,0.97,Aaxes.get_position().width,0.02]
 
 
     # 2. determine vmin, vmax 

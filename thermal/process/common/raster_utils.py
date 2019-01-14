@@ -5,7 +5,7 @@ import rasterio
 from affine import Affine
 from skimage.exposure import equalize_adapthist
 from shapely.geometry import box
-
+from scipy.ndimage import filters
 
 def read_in_aoi(src,aoi=None,aoi_crs=None):
     """
@@ -64,19 +64,82 @@ def aoi_scene_intersection(aoi, scene):
     return intersect
 
 
-def mask_qa(ints, bitmask=0b10011,bits=[]):
+def mask_qa(ints, bitmask=0b10011, bits=[], bit_pairs=[[]]):
     """
     Define the mask for the QA pixels
     
     Inputs:
     bitmask should be 1 for each bit that you want to mask
-    the return array will be True for values you want to mask      
+    the return array will be True for values you want to mask   
+
+    use bit_pairs if want to call mask_paired bits too
+    the result of this will be combined with the bitmask in the current
+    function using OR   
     """
 
     if len(bits)>0:
         bitmask=np.sum([2**x for x in bits])
-    return ((np.ravel(ints) & bitmask)>0).reshape(np.shape(ints))
+    mask = ((np.ravel(ints) & bitmask)>0).reshape(np.shape(ints))
 
+    if np.size(bit_pairs)>0:
+        return (mask | mask_paired_bits(ints, bit_pairs=bit_pairs))
+    else:
+        return mask
+
+def mask_paired_bits(ints, bit_pairs=[[]]):
+    """
+    Given a pair of bits, mask where both are set
+
+    Inputs:
+    2d list: each element of the outer list is a pair of bits that are 
+        masked as a pair
+    Return:
+        array that is True where both bits out of any pair =1
+    """
+    and_masks = []
+    for pair in bit_pairs:
+        bitmask1,bitmask2 = (2**x for x in pair)
+        and_masks += [((np.ravel(ints) & bitmask1)>0) 
+                      & ((np.ravel(ints) & bitmask2)>0)]
+    or_mask = np.any(and_masks,axis=0)
+    return or_mask.reshape(np.shape(ints))
+
+
+def smooth_mask_qa(bqa_data,mask_bits,sm_width,method='max',bit_pairs=[[]]):
+    """
+    Return a smoothed version of the mask output by mask_qa
+
+    Inputs:
+    bqa_data = the QA band raster array
+    mask_bits = list of which bits to mask
+    sm_width = width of the smoothing kernel in pixels (N below)
+    method = 'max' or 'convolve':
+        'max' means apply a maximum filter: any value 1 within a region NxN
+            means that whole region is set to 1. In other words, if there
+            is at least one value 1 within a region NxN centred on a pixel
+            then that pixel is set to 1
+        'convolve' means apply a convolution and threshold, so that if there 
+            are at least N pixels within a region NxN centred on a pixel then 
+            that pixel is set to 1
+
+    """
+    if method == 'convolve':
+        threshold = sm_width
+        mask = filters.convolve(
+                    mask_qa(bqa_data.squeeze(),bits=mask_bits,bit_pairs=bit_pairs).astype(np.int),
+                    np.ones((sm_width,sm_width)),
+                    mode='constant'
+                    )
+        mask = (mask>threshold).astype(np.int)
+
+    elif method == 'max':
+        mask = filters.maximum_filter(
+                    mask_qa(bqa_data,bits=mask_bits,bit_pairs=bit_pairs),size=sm_width
+                    )
+    else:
+        mask = bqa_data
+
+    return mask
 
 """functions to rescale data in images e.g. linear or hist equalise"""
 
