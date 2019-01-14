@@ -774,8 +774,8 @@ if __name__ == '__main__':
 
     """
 
-    date_label = '2014-2016'
-    place_label = 'derbyshire'
+    date_label = '2015-2019'
+    place_label = 'shropshire'
     max_cloud = 70.0
     cloud_mask_bits = [0,1,4,8]
     cloud_mask_paired_bits = [[5,6],[9,10],[11,12]]
@@ -791,14 +791,24 @@ if __name__ == '__main__':
         dates_of_interest = [['20161101','20170228'],['20171101','20180228']]
     elif date_label=='2017-2018':
         dates_of_interest = [['20171101','20180228']]
+    elif date_label=='2015-2019':
+        dates_of_interest = [['20151101','20160228'],['20161101','20170228'],
+                             ['20171101','20180228'],['20181101','20190228']]
     else:
         date_label=''
 
-    if place_label == 'derbyshire':
-        pathrows = [['202','023'],['203','023']]
-    else:
-        pathrows =[]
-    
+    # if place_label == 'derbyshire':
+    #     pathrows = [['202','023'],['203','023']]
+    # else:
+    #     pathrows =[]
+    # Lookup pathrow
+    clookup = pd.read_csv(cf.pathrow_lookup,delim_whitespace=True,header=0)
+    pr_ind = np.where(clookup['county'].str.match(
+        place_label,case=False,na=False))[:][0]
+    pr_str = clookup['pathrows'][pr_ind[0]]
+    pathrows = [['{:03}'.format(int(rr)) for rr in pr.split(',')] 
+                for pr in pr_str.split(';')]
+
     date_label = date_label #+'_smqa_hisnclcon'
     params = (date_label,place_label,dates_of_interest,pathrows,max_cloud,
               cloud_mask_bits,cloud_mask_paired_bits,
