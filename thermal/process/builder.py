@@ -775,7 +775,7 @@ if __name__ == '__main__':
     """
 
     date_label = '2015-2019'
-    place_label = 'shropshire'
+    place_label = 'herefordshire'
     max_cloud = 70.0
     cloud_mask_bits = [0,1,4,8]
     cloud_mask_paired_bits = [[5,6],[9,10],[11,12]]
