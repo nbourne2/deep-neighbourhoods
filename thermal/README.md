@@ -31,7 +31,12 @@ This module contains some general utility functions that are not specific to thi
 * *raster_utils.py* contains some general functions for interacting with raster geodata and wrapping certain rasterio functions  
 
 ## Running the code
-1. Modify config.py
+1. Modify *config.py*
+2. Run main function in *builder.py* with required parameters
+3. Use diagnostic plots to check masking etc
+4. Use *combine_lst_gdf.py* to combine outputs
+5. Use *estimate_energy_eff.py* to produce REEM output
+6. Use *validate_epc.py* to validate results (if required)
 
 
 ## Notebooks
