@@ -27,7 +27,12 @@ def read_in_aoi(src,aoi=None,aoi_crs=None):
             src.transform,aoi_bounds['maxx'],aoi_bounds['miny'])
         AoIheight,AoIwidth = AoIrow1 - AoIrow0, AoIcol1 - AoIcol0
         window = rasterio.windows.Window(AoIcol0,AoIrow0,AoIwidth,AoIheight)
-        
+        # but this window may extend outside the scene itself, which causes 
+        # problems because window_transform will not match the data read (rasterio bug?)
+        # workaround: use windows.intersection to create a window that is the
+        # intersection of the window and the scene:
+        w_scene = rasterio.windows.Window(0,0,src.width,src.height)
+        window = rasterio.windows.intersection(window,w_scene)
         arr = src.read(window=window)
         wtran = src.window_transform(window)
     return arr,wtran

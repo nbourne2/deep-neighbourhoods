@@ -209,7 +209,11 @@ def stack_tir(scene_urls,aoi,aoi_crs,
             stack_height,stack_width = (rowmax-rowmin,colmax-colmin)
             lst_stack = (ma.zeros((len(scene_urls),stack_height,stack_width),
                                   dtype=np.float,fill_value=np.nan
-                                 )+np.nan)   
+                                 )+np.nan)  
+            lst_stack.mask = True 
+            # so that anything that is not subsequently filled with data
+            # remains masked
+            stack_trans = tir_trans
             
         # Determine size of intersect in THIS scene
         intersect = ru.aoi_scene_intersection(aoi_box,bqa)
@@ -232,9 +236,17 @@ def stack_tir(scene_urls,aoi,aoi_crs,
         except (IndexError,AssertionError) as e:
             print('ERROR:',e)
             print('loop count',counter)
+            print(scene_tir)
             print(tir_data.shape, lst_stack.shape)
             print(rowmin,rowmax,colmin,colmax)
-            import pdb; pdb.set_trace()
+            srowmin,scolmin = rasterio.transform.rowcol(stack_trans,ins_left,ins_top)
+            srowmax,scolmax = rasterio.transform.rowcol(stack_trans,ins_right,ins_bottom)
+            print(srowmin,srowmax,scolmin,scolmax)
+            # import pdb; pdb.set_trace()
+
+            # ins_aoi = dict(zip(['minx','miny','maxx','maxy'],intersect.bounds))
+            # tir_datai,tir_transi = ru.read_in_aoi(tir,aoi=ins_aoi,aoi_crs=aoi_crs)
+            pass
 
         lst_data = lst.calculate_land_surface_temperature_NB(
                         red_data, nir_data, tir_data,
@@ -295,7 +307,14 @@ def stack_tir(scene_urls,aoi,aoi_crs,
                         fill_value=np.nan)
         
         # Then add to stack
-        lst_stack[counter,:,:] = lst_data_mask_all
+        ## Update: index stack layer according to where the intersection falls
+        srowmin,scolmin = rasterio.transform.rowcol(stack_trans,ins_left,ins_top)
+        srowmax,scolmax = rasterio.transform.rowcol(stack_trans,ins_right,ins_bottom)
+        ##
+        try:
+            lst_stack[counter,srowmin:srowmax,scolmin:scolmax] = lst_data_mask_all
+        except:
+            import pdb; pdb.set_trace()
 
     # Make profile for file output
     N_layers = counter+1
@@ -775,7 +794,7 @@ if __name__ == '__main__':
     """
 
     date_label = '2015-2019'
-    place_label = 'herefordshire'
+    place_label = 'nottinghamshire'
     max_cloud = 70.0
     cloud_mask_bits = [0,1,4,8]
     cloud_mask_paired_bits = [[5,6],[9,10],[11,12]]
