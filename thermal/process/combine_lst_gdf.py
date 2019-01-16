@@ -73,11 +73,11 @@ if __name__ == '__main__':
 
     LST_column = 'rLST_mean'
 
-    place_labels = ['derbyshire','nottinghamshire','shropshire']
+    place_labels = ['derbyshire','nottinghamshire','shropshire','staffordshire','herefordshire']
     date_label = '2015-2019'
     LST_label = 'rLST'
     lc_label = 'uaclc12'
-    output_filename = rootdir+'output_LSOA_LST/Three_counties_lsoa_{}.geojson'.format(
+    output_filename = rootdir+'output_LSOA_LST/Five_counties_lsoa_{}.geojson'.format(
         LST_column.split('_')[0])
 
     geojson_list = [

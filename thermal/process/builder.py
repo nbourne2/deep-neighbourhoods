@@ -794,12 +794,12 @@ if __name__ == '__main__':
     """
 
     date_label = '2015-2019'
-    place_label = 'nottinghamshire'
+    place_label = 'herefordshire'
     max_cloud = 70.0
-    cloud_mask_bits = [0,1,4,8]
-    cloud_mask_paired_bits = [[5,6],[9,10],[11,12]]
-    qamask_sm_width = 11
-    qamask_sm_method = 'convolve' # 'convolve', 'max'
+    cloud_mask_bits = [0,1]
+    cloud_mask_paired_bits = [[5,6],[7,8],[9,10],[11,12]]
+    qamask_sm_width = 51
+    qamask_sm_method = 'convolve_circ' # 'convolve_circ', 'convolve', 'max'
 
 
     if date_label=='2013-2014':
@@ -828,7 +828,7 @@ if __name__ == '__main__':
     pathrows = [['{:03}'.format(int(rr)) for rr in pr.split(',')] 
                 for pr in pr_str.split(';')]
 
-    date_label = date_label #+'_smqa_hisnclcon'
+    date_label = date_label+'_smqa51c2_hisnclcishcon'
     params = (date_label,place_label,dates_of_interest,pathrows,max_cloud,
               cloud_mask_bits,cloud_mask_paired_bits,
               qamask_sm_width,qamask_sm_method)

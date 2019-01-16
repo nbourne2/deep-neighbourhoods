@@ -109,6 +109,21 @@ def mask_paired_bits(ints, bit_pairs=[[]]):
     or_mask = np.any(and_masks,axis=0)
     return or_mask.reshape(np.shape(ints))
 
+def circ_ones(width):
+    """
+    Return a N*N kernel which is a circular tophat function
+    values are 1 where the distance from the centre is <=N
+    Input width (=N) can be odd or even but should be int.
+    In either case, width specifies the dimension of the output array 
+    and the diameter of the circular tophat
+
+    Return value: integer numpy array N*N that is 1 within the central circle
+    of radius N, and 0 outside.
+    """
+    r = (width)/2
+    y,x = np.ogrid[0.5-r: r+0.5, 0.5-r: r+0.5]
+    mask = x**2+y**2 <= int(r)**2
+    return mask.astype(np.int)
 
 def smooth_mask_qa(bqa_data,mask_bits,sm_width,method='max',bit_pairs=[[]]):
     """
@@ -128,8 +143,17 @@ def smooth_mask_qa(bqa_data,mask_bits,sm_width,method='max',bit_pairs=[[]]):
             that pixel is set to 1
 
     """
-    if method == 'convolve':
-        threshold = sm_width
+    if method == 'convolve_circ':
+        threshold = sm_width*np.sqrt(2)
+        mask = filters.convolve(
+                    mask_qa(bqa_data.squeeze(),bits=mask_bits,bit_pairs=bit_pairs).astype(np.int),
+                    circ_ones(sm_width),
+                    mode='constant'
+                    )
+        mask = (mask>threshold).astype(np.int)
+    
+    elif method == 'convolve':
+        threshold = sm_width*np.sqrt(2)
         mask = filters.convolve(
                     mask_qa(bqa_data.squeeze(),bits=mask_bits,bit_pairs=bit_pairs).astype(np.int),
                     np.ones((sm_width,sm_width)),
