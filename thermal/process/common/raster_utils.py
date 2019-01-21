@@ -125,7 +125,7 @@ def circ_ones(width):
     mask = x**2+y**2 <= int(r)**2
     return mask.astype(np.int)
 
-def smooth_mask_qa(bqa_data,mask_bits,sm_width,method='max',bit_pairs=[[]]):
+def smooth_mask_qa(bqa_data,mask_bits,sm_width,method='max',threshold=None,bit_pairs=[[]]):
     """
     Return a smoothed version of the mask output by mask_qa
 
@@ -144,7 +144,8 @@ def smooth_mask_qa(bqa_data,mask_bits,sm_width,method='max',bit_pairs=[[]]):
 
     """
     if method == 'convolve_circ':
-        threshold = sm_width**2 * 3.1416 / 4. / 8.
+        if not threshold:
+            threshold = sm_width**2 * 3.1416 / 4. / 8.
         mask = filters.convolve(
                     mask_qa(bqa_data.squeeze(),bits=mask_bits,bit_pairs=bit_pairs).astype(np.int),
                     circ_ones(sm_width),
@@ -153,7 +154,8 @@ def smooth_mask_qa(bqa_data,mask_bits,sm_width,method='max',bit_pairs=[[]]):
         mask = (mask>threshold).astype(np.int)
     
     elif method == 'convolve':
-        threshold = sm_width**2 / 8.
+        if not threshold:
+            threshold = sm_width**2 / 8.
         mask = filters.convolve(
                     mask_qa(bqa_data.squeeze(),bits=mask_bits,bit_pairs=bit_pairs).astype(np.int),
                     np.ones((sm_width,sm_width)),

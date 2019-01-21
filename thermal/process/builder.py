@@ -409,7 +409,7 @@ def main(*args):
     """
     (date_label,place_label,dates_of_interest,pathrows,max_cloud,
               cloud_mask_bits,cloud_mask_paired_bits,
-              qamask_sm_width,qamask_sm_method) = args
+              qamask_sm_width,qamask_sm_method,qamask_sm_threshold) = args
     assert type(place_label)==str and len(place_label)>0
     assert type(date_label)==str and len(date_label)>0
     assert len(dates_of_interest)>0
@@ -520,6 +520,7 @@ def main(*args):
             diag.display_rgb(scene_url,output_plot_dir,
                              cloud_mask_bits,cloud_mask_paired_bits,
                              qamask_sm_width,qamask_sm_method,
+                             qamask_sm_threshold,
                              plot_qamask=True,
                              aoi=county_bounds,aoi_crs=county_crs)
         output_list += [output_plot_dir+'*RGB.png']
@@ -533,6 +534,7 @@ def main(*args):
             diag.display_qamask(scene_url,output_plot_dir,
                                 cloud_mask_bits,cloud_mask_paired_bits,
                                 qamask_sm_width,qamask_sm_method,
+                                qamask_sm_threshold,
                                 aoi=county_bounds,aoi_crs=county_crs)
         output_list += [output_plot_dir+'*_mask_check.png']
 
@@ -800,7 +802,7 @@ if __name__ == '__main__':
     cloud_mask_paired_bits = [[5,6],[7,8],[9,10],[11,12]]
     qamask_sm_width = 125
     qamask_sm_method = 'convolve_circ' # 'convolve_circ', 'convolve', 'max'
-
+    qamask_sm_threshold = qamask_sm_width**2 * 3.1516 / 4. / 8.
 
     if date_label=='2013-2014':
         dates_of_interest = [['20131101','20140228']]
@@ -831,6 +833,6 @@ if __name__ == '__main__':
     date_label = date_label+'_smqa125c6_hisnclcishcon'
     params = (date_label,place_label,dates_of_interest,pathrows,max_cloud,
               cloud_mask_bits,cloud_mask_paired_bits,
-              qamask_sm_width,qamask_sm_method)
+              qamask_sm_width,qamask_sm_method,qamask_sm_threshold)
 
     main(*params)
