@@ -76,8 +76,11 @@ def display_qamask(scene_url,output_plot_dir,cloud_mask_bits,
     mask_occ_sm = ru.smooth_mask_qa(bqa_data,[1],smw,method=smm)
     mask_cloud_sm = ru.smooth_mask_qa(bqa_data,[0,4],smw,method=smm)
     mask_clcon_sm = ru.smooth_mask_qa(bqa_data,[6],smw,method=smm)
+    mask_clconl_sm = ru.smooth_mask_qa(bqa_data,[5],smw,method=smm)
     mask_cicon_sm = ru.smooth_mask_qa(bqa_data,[12],smw,method=smm)
+    mask_ciconl_sm = ru.smooth_mask_qa(bqa_data,[11],smw,method=smm)
     mask_cscon_sm = ru.smooth_mask_qa(bqa_data,[8],smw,method=smm)
+    mask_csconl_sm = ru.smooth_mask_qa(bqa_data,[7],smw,method=smm)
     mask_sncon_sm = ru.smooth_mask_qa(bqa_data,[10],smw,method=smm)
 
     # Filled contours for the various "confidence" masks
@@ -87,10 +90,16 @@ def display_qamask(scene_url,output_plot_dir,cloud_mask_bits,
                    colors='green',antialiased=True)
     ax1.contourf(mask_cscon_sm[ymin:ymax,xmin:xmax],[0.5,1],
                    colors='blue',antialiased=True)
+    # ax1.contour(mask_csconl_sm[ymin:ymax,xmin:xmax],[0.5],
+    #                colors='blue',linewidths=0.5,antialiased=True)
     ax1.contourf(mask_clcon_sm[ymin:ymax,xmin:xmax],[0.5,1],
-                   colors='red',antialiased=True)
+                  colors='red',antialiased=True)
+    # ax1.contour(mask_clconl_sm[ymin:ymax,xmin:xmax],[0.5],
+    #                colors='red',linewidths=0.5,antialiased=True)
     ax1.contourf(mask_cicon_sm[ymin:ymax,xmin:xmax],[0.5,1],
-                   colors='cyan',antialiased=True)
+                  colors='cyan',antialiased=True)
+    # ax1.contour(mask_ciconl_sm[ymin:ymax,xmin:xmax],[0.5],
+    #                colors='cyan',linewidths=0.5,antialiased=True)
     
     # Unfilled contour for the simple cloud bit
     ax1.contour(mask_cloud_sm[ymin:ymax,xmin:xmax],levels=[0.5],
